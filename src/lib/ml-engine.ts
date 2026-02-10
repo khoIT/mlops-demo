@@ -392,16 +392,25 @@ function trainLogisticRegression(
       }
     }
 
-    losses.push(totalLoss / nSamples);
+    // Add L2 regularization penalty to loss
+    const lambda = 0.1; // regularization strength — prevents weight concentration
+    let l2Penalty = 0;
+    for (let c = 0; c < nClasses; c++) {
+      for (let j = 0; j < nFeatures; j++) {
+        l2Penalty += weights[c][j] ** 2;
+      }
+    }
+    losses.push(totalLoss / nSamples + (lambda / 2) * l2Penalty);
 
-    // Gradient descent
+    // Gradient descent with L2 regularization
     for (let c = 0; c < nClasses; c++) {
       for (let j = 0; j < nFeatures; j++) {
         let grad = 0;
         for (let i = 0; i < nSamples; i++) {
           grad += (predictions[i][c] - encoded[i][c]) * normalized[i][j];
         }
-        weights[c][j] -= (lr * grad) / nSamples;
+        grad = grad / nSamples + lambda * weights[c][j];
+        weights[c][j] -= lr * grad;
       }
       let biasGrad = 0;
       for (let i = 0; i < nSamples; i++) {

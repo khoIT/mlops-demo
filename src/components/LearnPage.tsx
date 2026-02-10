@@ -27,22 +27,35 @@ import {
   Lightbulb,
   GitBranch,
   RefreshCw,
+  Wrench,
+  Clock,
+  Search,
+  Lock,
+  Server,
+  FileText,
+  Eye,
+  Cpu,
+  Monitor,
 } from "lucide-react";
 
 type Section =
   | "overview"
   | "supervised"
   | "unsupervised"
+  | "feature_engineering"
   | "evaluation"
   | "production"
+  | "compute"
   | "glossary";
 
 const SECTIONS: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <BookOpen size={16} /> },
   { id: "supervised", label: "Supervised Pipeline", icon: <FlaskConical size={16} /> },
   { id: "unsupervised", label: "Unsupervised Pipeline", icon: <Users size={16} /> },
+  { id: "feature_engineering", label: "Feature Engineering IRL", icon: <Wrench size={16} /> },
   { id: "evaluation", label: "Evaluation & Testing", icon: <Target size={16} /> },
   { id: "production", label: "Production & Monitoring", icon: <Rocket size={16} /> },
+  { id: "compute", label: "Compute & Infrastructure", icon: <Cpu size={16} /> },
   { id: "glossary", label: "Glossary", icon: <BookOpen size={16} /> },
 ];
 
@@ -468,6 +481,440 @@ export default function LearnPage({ onBack }: LearnPageProps) {
             </>
           )}
 
+          {/* ═══════════════════ FEATURE ENGINEERING IRL ═══════════════════ */}
+          {activeSection === "feature_engineering" && (
+            <>
+              <SectionCard title="What a Data Scientist Actually Does" color="amber">
+                <p>
+                  The demo app simplifies feature engineering into a few clicks. In reality, turning raw data
+                  into production-ready features is <strong className="text-zinc-200">the hardest and most
+                  time-consuming part of ML</strong>. Here&apos;s the real 9-step workflow, mapped to the
+                  two pipelines in this app.
+                </p>
+                <div className="bg-zinc-800/50 rounded-lg p-3 mt-2 border border-zinc-700">
+                  <div className="flex items-start gap-2">
+                    <Lightbulb size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                    <p className="text-xs text-zinc-400">
+                      <strong className="text-zinc-300">Why this matters:</strong> Most ML tutorials
+                      jump straight to &quot;fit the model.&quot; But in production, 80% of the work is in
+                      steps 1-6 below. If you get these wrong, no model architecture can save you.
+                    </p>
+                  </div>
+                </div>
+              </SectionCard>
+
+              {/* Step 1 */}
+              <div className="bg-zinc-900 border border-amber-500/20 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-full bg-amber-500/15 flex items-center justify-center text-xs font-bold text-amber-400">1</div>
+                  <h3 className="text-sm font-bold text-amber-400">Define the Entity + Label Time</h3>
+                </div>
+                <div className="text-[13px] text-zinc-400 leading-relaxed space-y-2">
+                  <p>
+                    Before writing any code, decide: <strong className="text-zinc-200">who are you predicting
+                    for</strong>, and <strong className="text-zinc-200">at what point in time</strong>?
+                  </p>
+                  <div className="grid grid-cols-3 gap-3 mt-2">
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="text-xs font-semibold text-zinc-300 mb-1">Entity</div>
+                      <div className="text-[11px] text-zinc-500">The unit you&apos;re predicting about. Usually <code className="text-amber-300">user_id</code>, but could be session, device, team, etc.</div>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="text-xs font-semibold text-zinc-300 mb-1">Observation Time</div>
+                      <div className="text-[11px] text-zinc-500">The timestamp at which you want to predict. Examples: end of day, after first 30 minutes, after 3 sessions.</div>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="text-xs font-semibold text-zinc-300 mb-1">Label</div>
+                      <div className="text-[11px] text-zinc-500">What you&apos;re predicting, measured <strong className="text-zinc-300">after</strong> the observation time. Churn label, persona, activation success.</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="bg-blue-500/5 rounded-lg p-3 border border-blue-500/20">
+                      <div className="text-xs font-semibold text-blue-400 mb-1 flex items-center gap-1.5">
+                        <FlaskConical size={12} />
+                        In this app: Supervised
+                      </div>
+                      <div className="text-[11px] text-zinc-500">Entity = <code className="text-blue-300">user_id</code>. Label = <code className="text-blue-300">is_power_user</code> (top 25% by sessions AND resource diversity). Observation time: end of the data window.</div>
+                    </div>
+                    <div className="bg-purple-500/5 rounded-lg p-3 border border-purple-500/20">
+                      <div className="text-xs font-semibold text-purple-400 mb-1 flex items-center gap-1.5">
+                        <Users size={12} />
+                        In this app: Unsupervised
+                      </div>
+                      <div className="text-[11px] text-zinc-500">Entity = <code className="text-purple-300">user_id</code>. No label — the algorithm discovers persona clusters. Observation time: end of the data window.</div>
+                    </div>
+                  </div>
+                  <div className="bg-red-500/10 rounded-lg p-2.5 flex items-start gap-2 mt-1">
+                    <AlertTriangle size={12} className="text-red-400 mt-0.5 shrink-0" />
+                    <span className="text-xs text-zinc-400"><strong className="text-zinc-300">This is the part most demos skip, but it&apos;s the key to avoiding leakage.</strong> If you compute features using data from <em>after</em> the label event, you&apos;re cheating — the model sees the future.</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="bg-zinc-900 border border-blue-500/20 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-full bg-blue-500/15 flex items-center justify-center text-xs font-bold text-blue-400">2</div>
+                  <h3 className="text-sm font-bold text-blue-400">Specify Feature Definitions (Contract)</h3>
+                </div>
+                <div className="text-[13px] text-zinc-400 leading-relaxed space-y-2">
+                  <p>
+                    Write formal specs for each feature <strong className="text-zinc-200">before</strong> coding. This is the &quot;contract&quot; between
+                    data engineering and data science.
+                  </p>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 font-mono text-xs text-zinc-400 space-y-1">
+                    <div className="text-zinc-300 font-semibold font-sans mb-1.5">Example Feature Spec:</div>
+                    <div><span className="text-cyan-400">name:</span> total_events_30d</div>
+                    <div><span className="text-cyan-400">inputs:</span> raw_logs table</div>
+                    <div><span className="text-cyan-400">time_window:</span> 30 days before observation time</div>
+                    <div><span className="text-cyan-400">aggregation:</span> COUNT(*) WHERE user_id = entity</div>
+                    <div><span className="text-cyan-400">freshness:</span> batch daily at 6am UTC</div>
+                    <div><span className="text-cyan-400">owner:</span> data-eng-team</div>
+                    <div><span className="text-cyan-400">SLA:</span> available by 7am UTC, &lt;1% null rate</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="bg-blue-500/5 rounded-lg p-3 border border-blue-500/20">
+                      <div className="text-xs font-semibold text-blue-400 mb-1 flex items-center gap-1.5">
+                        <FlaskConical size={12} />
+                        In this app: Supervised
+                      </div>
+                      <div className="text-[11px] text-zinc-500">Features like <code className="text-blue-300">session_count</code>, <code className="text-blue-300">mobile_ratio</code>, <code className="text-blue-300">export_count</code> are defined in the Feature Store tab. In production, each would have a formal spec like above.</div>
+                    </div>
+                    <div className="bg-purple-500/5 rounded-lg p-3 border border-purple-500/20">
+                      <div className="text-xs font-semibold text-purple-400 mb-1 flex items-center gap-1.5">
+                        <Users size={12} />
+                        In this app: Unsupervised
+                      </div>
+                      <div className="text-[11px] text-zinc-500">Persona features like <code className="text-purple-300">realtime_ratio</code>, <code className="text-purple-300">mobile_ratio</code>, <code className="text-purple-300">avg_active_hour</code> use the same raw data but are aggregated differently for clustering.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="bg-zinc-900 border border-cyan-500/20 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-full bg-cyan-500/15 flex items-center justify-center text-xs font-bold text-cyan-400">3</div>
+                  <h3 className="text-sm font-bold text-cyan-400">Build Transformation Code (Repeatable, Testable)</h3>
+                </div>
+                <div className="text-[13px] text-zinc-400 leading-relaxed space-y-2">
+                  <p>
+                    Implement features with production-grade tooling. The code must be <strong className="text-zinc-200">repeatable and testable</strong>, not a one-off notebook.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="text-xs font-semibold text-zinc-300 mb-1.5">Common Tools</div>
+                      <ul className="text-[11px] text-zinc-500 space-y-0.5">
+                        <li>- <strong className="text-zinc-300">SQL</strong> (warehouse / lakehouse)</li>
+                        <li>- <strong className="text-zinc-300">PySpark</strong> (dataframe code at scale)</li>
+                        <li>- <strong className="text-zinc-300">Streaming</strong> (Kafka/Flink for real-time)</li>
+                        <li>- <strong className="text-zinc-300">dbt</strong> (SQL transformation framework)</li>
+                      </ul>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="text-xs font-semibold text-zinc-300 mb-1.5">Must Be</div>
+                      <ul className="text-[11px] text-zinc-500 space-y-0.5">
+                        <li>- <strong className="text-zinc-300">Idempotent:</strong> reruns don&apos;t create duplicates</li>
+                        <li>- <strong className="text-zinc-300">Backfillable:</strong> can compute history</li>
+                        <li>- <strong className="text-zinc-300">Partitioned:</strong> by date/time</li>
+                        <li>- <strong className="text-zinc-300">Unit-tested:</strong> on small samples</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 mt-1">
+                    <div className="text-xs font-semibold text-zinc-300 mb-1 flex items-center gap-1.5">
+                      <Wrench size={12} className="text-cyan-400" />
+                      In this app
+                    </div>
+                    <div className="text-[11px] text-zinc-500">The <code className="text-cyan-300">computeUserFeatures()</code> and <code className="text-cyan-300">cleanLogs()</code> functions in <code className="text-cyan-300">ml-engine.ts</code> are the transformation code. In production, these would be SQL/Spark jobs running on a schedule, not browser JavaScript.</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 4 */}
+              <div className="bg-zinc-900 border border-green-500/20 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-full bg-green-500/15 flex items-center justify-center text-xs font-bold text-green-400">4</div>
+                  <h3 className="text-sm font-bold text-green-400">Validate Data Quality + Drift</h3>
+                </div>
+                <div className="text-[13px] text-zinc-400 leading-relaxed space-y-2">
+                  <p>
+                    Before publishing features, run automated checks. <strong className="text-zinc-200">Bad features
+                    silently produce bad predictions</strong> — there&apos;s no error message.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { name: "Schema checks", desc: "Correct types, expected null rates. Is session_count always a number? Is mobile_ratio between 0 and 1?", icon: <FileText size={12} /> },
+                      { name: "Constraint checks", desc: "Ratios between 0–1, counts >= 0, no negative activity spans. Business rules that features must satisfy.", icon: <Shield size={12} /> },
+                      { name: "Freshness checks", desc: "Did yesterday's partition land? Is the data current? Stale features = stale predictions.", icon: <Clock size={12} /> },
+                      { name: "Drift checks", desc: "Has the distribution of any feature changed significantly over time? Could indicate a data pipeline bug or a real behavioral shift.", icon: <TrendingDown size={12} /> },
+                    ].map((c) => (
+                      <div key={c.name} className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                        <div className="text-xs font-semibold text-zinc-300 mb-1 flex items-center gap-1.5">
+                          {c.icon}
+                          {c.name}
+                        </div>
+                        <div className="text-[11px] text-zinc-500">{c.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 mt-1">
+                    <div className="text-xs font-semibold text-zinc-300 mb-1 flex items-center gap-1.5">
+                      <Eye size={12} className="text-green-400" />
+                      In this app
+                    </div>
+                    <div className="text-[11px] text-zinc-500">The Data Profile tab shows distributions and stats. In production, these checks would be automated with tools like <strong className="text-zinc-300">Great Expectations</strong>, <strong className="text-zinc-300">Soda</strong>, or <strong className="text-zinc-300">dbt tests</strong>, and would block the pipeline if they fail.</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 5 */}
+              <div className="bg-zinc-900 border border-purple-500/20 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-full bg-purple-500/15 flex items-center justify-center text-xs font-bold text-purple-400">5</div>
+                  <h3 className="text-sm font-bold text-purple-400">Publish to a Feature Store</h3>
+                </div>
+                <div className="text-[13px] text-zinc-400 leading-relaxed space-y-2">
+                  <p>
+                    A Feature Store is where features become <strong className="text-zinc-200">discoverable,
+                    reusable, and governed</strong>. This is the bridge between data engineering and ML.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { prop: "Discoverable", desc: "Searchable catalog — other teams can find and reuse features instead of rebuilding them." },
+                      { prop: "Reusable", desc: "Shared definitions across models. The same mobile_ratio feature can power 10 different models." },
+                      { prop: "Governable", desc: "ACLs, lineage tracking. Know who created a feature, what data it depends on, who uses it." },
+                      { prop: "Consistent", desc: "Same computation for training and serving. This is how you prevent training/serving skew." },
+                    ].map((p) => (
+                      <div key={p.prop} className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                        <div className="text-xs font-semibold text-zinc-300 mb-1">{p.prop}</div>
+                        <div className="text-[11px] text-zinc-500">{p.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-red-500/10 rounded-lg p-2.5 flex items-start gap-2 mt-1">
+                    <AlertTriangle size={12} className="text-red-400 mt-0.5 shrink-0" />
+                    <span className="text-xs text-zinc-400"><strong className="text-zinc-300">Point-in-time correctness</strong> is critical. When creating training sets, you must join features <em>as they existed at the observation time</em>, not their current values. Tools like <strong className="text-zinc-300">Feast</strong> explicitly support this with point-in-time joins. Without it, you&apos;re training on &quot;future&quot; feature values = data leakage.</span>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 mt-1">
+                    <div className="text-xs font-semibold text-zinc-300 mb-1 flex items-center gap-1.5">
+                      <Database size={12} className="text-purple-400" />
+                      In this app
+                    </div>
+                    <div className="text-[11px] text-zinc-500">The Feature Store tab in Data Explorer is a simplified version. In production, you&apos;d use <strong className="text-zinc-300">Feast</strong>, <strong className="text-zinc-300">Databricks Feature Store</strong>, <strong className="text-zinc-300">Vertex AI Feature Store</strong>, or <strong className="text-zinc-300">Tecton</strong> — with versioning, lineage, and access control.</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 6 */}
+              <div className="bg-zinc-900 border border-blue-500/20 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-full bg-blue-500/15 flex items-center justify-center text-xs font-bold text-blue-400">6</div>
+                  <h3 className="text-sm font-bold text-blue-400">Create Training Datasets (Joins at Observation Time)</h3>
+                </div>
+                <div className="text-[13px] text-zinc-400 leading-relaxed space-y-2">
+                  <p>
+                    Generate a training dataset by joining the <strong className="text-zinc-200">entity table</strong> (user_id + timestamps + label) with <strong className="text-zinc-200">feature tables</strong> using as-of joins / time-travel joins.
+                  </p>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 font-mono text-xs text-zinc-400 space-y-0.5">
+                    <div className="text-zinc-300 font-semibold font-sans mb-1.5">Conceptual Join:</div>
+                    <div><span className="text-cyan-400">SELECT</span> e.user_id, e.label,</div>
+                    <div>&nbsp;&nbsp;f.session_count, f.mobile_ratio, f.export_count</div>
+                    <div><span className="text-cyan-400">FROM</span> entity_table e</div>
+                    <div><span className="text-cyan-400">LEFT JOIN</span> feature_table f</div>
+                    <div>&nbsp;&nbsp;<span className="text-cyan-400">ON</span> e.user_id = f.user_id</div>
+                    <div>&nbsp;&nbsp;<span className="text-cyan-400">AND</span> f.feature_timestamp &lt;= e.observation_time</div>
+                    <div>&nbsp;&nbsp;<span className="text-zinc-600">-- point-in-time: only features known BEFORE the label event</span></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="bg-blue-500/5 rounded-lg p-3 border border-blue-500/20">
+                      <div className="text-xs font-semibold text-blue-400 mb-1 flex items-center gap-1.5">
+                        <FlaskConical size={12} />
+                        In this app: Supervised
+                      </div>
+                      <div className="text-[11px] text-zinc-500">The app computes features and labels in one pass from all data. In production, Databricks frames this as &quot;create a training dataset that defines features and how to join them&quot; — and the model keeps references to those feature versions.</div>
+                    </div>
+                    <div className="bg-purple-500/5 rounded-lg p-3 border border-purple-500/20">
+                      <div className="text-xs font-semibold text-purple-400 mb-1 flex items-center gap-1.5">
+                        <Users size={12} />
+                        In this app: Unsupervised
+                      </div>
+                      <div className="text-[11px] text-zinc-500">No labels to join, but the same point-in-time logic applies to features. You don&apos;t want to cluster on features computed from data that includes future behavior.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 7 */}
+              <div className="bg-zinc-900 border border-cyan-500/20 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-full bg-cyan-500/15 flex items-center justify-center text-xs font-bold text-cyan-400">7</div>
+                  <h3 className="text-sm font-bold text-cyan-400">Train + Track Experiments + Register Model</h3>
+                </div>
+                <div className="text-[13px] text-zinc-400 leading-relaxed space-y-2">
+                  <p>
+                    Now you finally train. But training without tracking is a recipe for &quot;which model was that again?&quot;
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="text-xs font-semibold text-zinc-300 mb-1">Log Everything</div>
+                      <ul className="text-[11px] text-zinc-500 space-y-0.5">
+                        <li>- Params (learning rate, K, depth)</li>
+                        <li>- Metrics (accuracy, F1, inertia)</li>
+                        <li>- Artifacts (model file, plots)</li>
+                      </ul>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="text-xs font-semibold text-zinc-300 mb-1">Register Model</div>
+                      <ul className="text-[11px] text-zinc-500 space-y-0.5">
+                        <li>- Version the model</li>
+                        <li>- Stage: dev → staging → prod</li>
+                        <li>- Approval workflow</li>
+                      </ul>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="text-xs font-semibold text-zinc-300 mb-1">Link Lineage</div>
+                      <ul className="text-[11px] text-zinc-500 space-y-0.5">
+                        <li>- Model ↔ feature versions</li>
+                        <li>- Model ↔ data versions</li>
+                        <li>- Model ↔ code commit</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 mt-1">
+                    <div className="text-xs font-semibold text-zinc-300 mb-1 flex items-center gap-1.5">
+                      <GitBranch size={12} className="text-cyan-400" />
+                      In this app
+                    </div>
+                    <div className="text-[11px] text-zinc-500">The Experiments tab logs params and metrics. The Model Registry stores the active model. In production, you&apos;d use <strong className="text-zinc-300">MLflow</strong>, <strong className="text-zinc-300">Databricks Unity Catalog</strong>, or <strong className="text-zinc-300">Vertex AI Model Registry</strong> — with full lineage back to training data and feature versions.</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 8 */}
+              <div className="bg-zinc-900 border border-green-500/20 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-full bg-green-500/15 flex items-center justify-center text-xs font-bold text-green-400">8</div>
+                  <h3 className="text-sm font-bold text-green-400">Serve Features for Inference (Batch or Online)</h3>
+                </div>
+                <div className="text-[13px] text-zinc-400 leading-relaxed space-y-2">
+                  <p>
+                    Two fundamentally different serving modes, chosen by your use case:
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="text-xs font-semibold text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                        <Database size={12} className="text-blue-400" />
+                        Offline / Batch Serving
+                      </div>
+                      <ul className="text-[11px] text-zinc-500 space-y-0.5">
+                        <li>- Score many users nightly</li>
+                        <li>- Write results to a table</li>
+                        <li>- Good for: email campaigns, dashboards, weekly reports</li>
+                        <li>- Latency: minutes to hours is fine</li>
+                      </ul>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="text-xs font-semibold text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                        <Server size={12} className="text-green-400" />
+                        Online / Real-time Serving
+                      </div>
+                      <ul className="text-[11px] text-zinc-500 space-y-0.5">
+                        <li>- Fetch latest features at low latency</li>
+                        <li>- Score one user on demand</li>
+                        <li>- Good for: onboarding, recommendations, fraud detection</li>
+                        <li>- Latency: &lt;100ms required</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="bg-blue-500/5 rounded-lg p-3 border border-blue-500/20">
+                      <div className="text-xs font-semibold text-blue-400 mb-1 flex items-center gap-1.5">
+                        <FlaskConical size={12} />
+                        In this app: Supervised
+                      </div>
+                      <div className="text-[11px] text-zinc-500">Model Registry does online-style inference — you load a user, it computes features and predicts instantly. In production, this might be a REST API behind a load balancer.</div>
+                    </div>
+                    <div className="bg-purple-500/5 rounded-lg p-3 border border-purple-500/20">
+                      <div className="text-xs font-semibold text-purple-400 mb-1 flex items-center gap-1.5">
+                        <Users size={12} />
+                        In this app: Unsupervised
+                      </div>
+                      <div className="text-[11px] text-zinc-500">The Inference Pipeline (Step 7) is online serving — user logs in → compute features → nearest centroid → personalized onboarding. Databricks also supports &quot;on-demand&quot; features computed at inference time via UDFs.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 9 */}
+              <div className="bg-zinc-900 border border-red-500/20 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-full bg-red-500/15 flex items-center justify-center text-xs font-bold text-red-400">9</div>
+                  <h3 className="text-sm font-bold text-red-400">Monitor in Production</h3>
+                </div>
+                <div className="text-[13px] text-zinc-400 leading-relaxed space-y-2">
+                  <p>
+                    Deploying a model is not the end — it&apos;s where the <strong className="text-zinc-200">real work begins</strong>. Models degrade silently.
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { title: "Feature Freshness", desc: "Are features being computed on schedule? A stale feature table means predictions are based on old data.", icon: <Clock size={12} /> },
+                      { title: "Distribution Drift", desc: "Have feature distributions shifted from training? If mobile_ratio was 0.3 avg in training and now it's 0.7, the model is out of distribution.", icon: <TrendingDown size={12} /> },
+                      { title: "Prediction Drift", desc: "Is the model predicting differently over time? A sudden shift in class distribution indicates something changed.", icon: <BarChart3 size={12} /> },
+                      { title: "Model Performance", desc: "When ground truth labels eventually arrive, compare to predictions. This is the gold standard but has delay.", icon: <Target size={12} /> },
+                      { title: "Latency & Errors", desc: "Is the inference endpoint meeting SLAs? Are there timeout errors? Feature fetch failures?", icon: <Activity size={12} /> },
+                      { title: "Alerting", desc: "Route alerts to Slack, PagerDuty, etc. Define thresholds for each metric that trigger investigation.", icon: <AlertTriangle size={12} /> },
+                    ].map((m) => (
+                      <div key={m.title} className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                        <div className="text-xs font-semibold text-zinc-300 mb-1 flex items-center gap-1.5">
+                          {m.icon}
+                          {m.title}
+                        </div>
+                        <div className="text-[11px] text-zinc-500">{m.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary flow */}
+              <SectionCard title="The Full Picture: Demo vs Reality" color="amber">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-zinc-800">
+                        <th className="text-left py-2 pr-3 text-zinc-400 font-semibold w-8">#</th>
+                        <th className="text-left py-2 pr-3 text-zinc-400 font-semibold">Step</th>
+                        <th className="text-left py-2 pr-3 text-amber-400 font-semibold">In This Demo</th>
+                        <th className="text-left py-2 text-cyan-400 font-semibold">In Production</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/50">
+                      {[
+                        { n: "1", step: "Entity + Label Time", demo: "Implicit — all data, one snapshot", prod: "Explicit entity table with timestamps, careful label definition" },
+                        { n: "2", step: "Feature Specs", demo: "Hardcoded in ml-engine.ts", prod: "Formal contracts with owners, SLAs, freshness requirements" },
+                        { n: "3", step: "Transformation Code", demo: "JavaScript in the browser", prod: "SQL/Spark jobs, dbt models, CI/CD, unit tests" },
+                        { n: "4", step: "Data Quality", demo: "Visual inspection in Data Profile", prod: "Automated checks (Great Expectations, Soda) that block pipelines" },
+                        { n: "5", step: "Feature Store", demo: "In-memory feature table", prod: "Feast, Databricks, Vertex AI — versioned, governed, discoverable" },
+                        { n: "6", step: "Training Dataset", demo: "Direct array from feature table", prod: "Point-in-time joins, time-travel queries, dataset versioning" },
+                        { n: "7", step: "Train + Register", demo: "Button click, results in UI", prod: "MLflow/W&B tracking, model registry, approval workflows" },
+                        { n: "8", step: "Serve", demo: "In-browser prediction", prod: "REST APIs, batch scoring, feature serving with <100ms latency" },
+                        { n: "9", step: "Monitor", demo: "Not implemented", prod: "Drift detection, alerting, retraining triggers, A/B tests" },
+                      ].map((r) => (
+                        <tr key={r.n}>
+                          <td className="py-2 pr-3 text-zinc-500 font-mono">{r.n}</td>
+                          <td className="py-2 pr-3 text-zinc-300 font-medium">{r.step}</td>
+                          <td className="py-2 pr-3 text-zinc-500">{r.demo}</td>
+                          <td className="py-2 text-zinc-500">{r.prod}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </SectionCard>
+            </>
+          )}
+
           {/* ═══════════════════ EVALUATION ═══════════════════ */}
           {activeSection === "evaluation" && (
             <>
@@ -721,6 +1168,203 @@ export default function LearnPage({ onBack }: LearnPageProps) {
             </>
           )}
 
+          {/* ═══════════════════ COMPUTE & INFRASTRUCTURE ═══════════════════ */}
+          {activeSection === "compute" && (
+            <>
+              <SectionCard title="How Training Works Without a GPU" color="cyan">
+                <p>
+                  This entire ML pipeline runs <strong className="text-zinc-200">in the browser using plain
+                  TypeScript</strong> — no Python, no TensorFlow, no GPU. Everything is CPU-based,
+                  executed in the browser&apos;s main thread.
+                </p>
+                <div className="bg-zinc-800/50 rounded-lg p-3 mt-2 border border-zinc-700">
+                  <div className="flex items-start gap-2">
+                    <Lightbulb size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                    <p className="text-xs text-zinc-400">
+                      <strong className="text-zinc-300">Key insight:</strong> GPUs are only needed for
+                      deep learning (neural networks with millions/billions of parameters). Classical ML
+                      algorithms like the ones in this demo run perfectly fine on CPU — even at production scale.
+                    </p>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="What This App Implements From Scratch" color="blue">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-zinc-800/50 rounded-lg p-4 border border-blue-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FlaskConical size={14} className="text-blue-400" />
+                      <span className="text-xs font-semibold text-blue-300">Logistic Regression</span>
+                    </div>
+                    <ul className="text-[11px] text-zinc-500 space-y-1">
+                      <li>- Manual gradient descent with sigmoid/softmax</li>
+                      <li>- Z-score normalization (simple array math)</li>
+                      <li>- L2 regularization to prevent weight concentration</li>
+                      <li>- Forward pass: nested loops over samples × features</li>
+                      <li>- Backward pass: compute gradients, update weights</li>
+                    </ul>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-4 border border-green-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <GitBranch size={14} className="text-green-400" />
+                      <span className="text-xs font-semibold text-green-300">Decision Tree</span>
+                    </div>
+                    <ul className="text-[11px] text-zinc-500 space-y-1">
+                      <li>- Recursive tree building with Gini impurity splits</li>
+                      <li>- No matrix math needed — conditional logic + counting</li>
+                      <li>- Configurable max depth to prevent overfitting</li>
+                      <li>- Feature importance via split frequency</li>
+                      <li>- Prediction: simple tree traversal</li>
+                    </ul>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-4 border border-purple-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users size={14} className="text-purple-400" />
+                      <span className="text-xs font-semibold text-purple-300">K-Means Clustering</span>
+                    </div>
+                    <ul className="text-[11px] text-zinc-500 space-y-1">
+                      <li>- K-Means++ initialization (spread centroids apart)</li>
+                      <li>- Iterative assign → update centroid loop</li>
+                      <li>- Euclidean distance calculations</li>
+                      <li>- Convergence detection (labels stop changing)</li>
+                      <li>- Inertia computation for evaluation</li>
+                    </ul>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-4 border border-amber-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Settings2 size={14} className="text-amber-400" />
+                      <span className="text-xs font-semibold text-amber-300">Supporting Utilities</span>
+                    </div>
+                    <ul className="text-[11px] text-zinc-500 space-y-1">
+                      <li>- Feature engineering (raw logs → user features)</li>
+                      <li>- Z-score normalization &amp; label encoding</li>
+                      <li>- Fisher-Yates shuffle for train/test split</li>
+                      <li>- Percentile-based target variable labeling</li>
+                      <li>- Confusion matrix &amp; metric computation</li>
+                    </ul>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="When Do You Actually Need a GPU?" color="amber">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-zinc-800">
+                        <th className="text-left py-2 pr-4 text-zinc-400 font-semibold">Scenario</th>
+                        <th className="text-left py-2 pr-4 text-zinc-400 font-semibold">GPU?</th>
+                        <th className="text-left py-2 text-zinc-400 font-semibold">Why</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/50">
+                      {[
+                        { scenario: "Logistic regression on 168 rows", gpu: "No", why: "Milliseconds on CPU. This is what the demo does." },
+                        { scenario: "Random forest on 1M rows", gpu: "Probably not", why: "CPU is fine — XGBoost/LightGBM handle this easily." },
+                        { scenario: "K-Means on 168 rows × 6 features", gpu: "No", why: "Trivial for CPU. Even 1M points works on CPU." },
+                        { scenario: "Training a CNN (image classification)", gpu: "Yes", why: "Convolution operations are massively parallelizable on GPU." },
+                        { scenario: "Training a transformer (NLP)", gpu: "Yes", why: "Attention mechanisms involve huge matrix multiplications." },
+                        { scenario: "LLM fine-tuning (billions of params)", gpu: "Absolutely", why: "Would take weeks on CPU. Hours on multiple GPUs/TPUs." },
+                        { scenario: "Real-time inference (REST API)", gpu: "Depends", why: "Classical ML → CPU. Deep learning → often GPU for throughput." },
+                      ].map((r) => (
+                        <tr key={r.scenario}>
+                          <td className="py-2 pr-4 text-zinc-300 font-medium">{r.scenario}</td>
+                          <td className={`py-2 pr-4 font-semibold ${r.gpu === "No" ? "text-green-400" : r.gpu === "Yes" || r.gpu === "Absolutely" ? "text-red-400" : "text-amber-400"}`}>{r.gpu}</td>
+                          <td className="py-2 text-zinc-500">{r.why}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Production Compute: What Teams Actually Use" color="green">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                    <div className="text-xs font-semibold text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                      <Cpu size={12} className="text-blue-400" />
+                      CPU
+                    </div>
+                    <ul className="text-[11px] text-zinc-500 space-y-0.5">
+                      <li>- Classical ML (scikit-learn, XGBoost)</li>
+                      <li>- Feature engineering (Spark, SQL)</li>
+                      <li>- Data preprocessing pipelines</li>
+                      <li>- Low-latency inference APIs</li>
+                      <li>- Most production workloads</li>
+                    </ul>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                    <div className="text-xs font-semibold text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                      <Monitor size={12} className="text-green-400" />
+                      GPU
+                    </div>
+                    <ul className="text-[11px] text-zinc-500 space-y-0.5">
+                      <li>- Deep learning (PyTorch, TensorFlow)</li>
+                      <li>- Image/video/audio models</li>
+                      <li>- NLP transformers (BERT, GPT)</li>
+                      <li>- Embedding generation at scale</li>
+                      <li>- NVIDIA A100, H100, etc.</li>
+                    </ul>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                    <div className="text-xs font-semibold text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                      <Rocket size={12} className="text-purple-400" />
+                      TPU / Custom
+                    </div>
+                    <ul className="text-[11px] text-zinc-500 space-y-0.5">
+                      <li>- Google TPUs for large-scale training</li>
+                      <li>- AWS Inferentia for inference</li>
+                      <li>- Apple Neural Engine (on-device)</li>
+                      <li>- Training LLMs, foundation models</li>
+                      <li>- Specialized matrix operations</li>
+                    </ul>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="This App vs Production Stack" color="purple">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-zinc-800">
+                        <th className="text-left py-2 pr-4 text-zinc-400 font-semibold w-36">Component</th>
+                        <th className="text-left py-2 pr-4 text-purple-400 font-semibold">In This Demo</th>
+                        <th className="text-left py-2 text-cyan-400 font-semibold">Production Equivalent</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/50">
+                      {[
+                        { comp: "Runtime", demo: "Browser (V8 JS engine)", prod: "Python on cloud VMs / containers" },
+                        { comp: "ML library", demo: "Custom TypeScript (ml-engine.ts)", prod: "scikit-learn, XGBoost, PyTorch" },
+                        { comp: "Data processing", demo: "In-memory arrays", prod: "Spark, Pandas, Polars on clusters" },
+                        { comp: "Compute", demo: "Your laptop CPU", prod: "Cloud CPUs (or GPUs for deep learning)" },
+                        { comp: "Training time", demo: "< 1 second", prod: "Seconds (classical) to days (LLMs)" },
+                        { comp: "Dataset size", demo: "~168 rows", prod: "Millions to billions of rows" },
+                        { comp: "Model serving", demo: "In-browser function call", prod: "REST API, gRPC, batch Spark jobs" },
+                      ].map((r) => (
+                        <tr key={r.comp}>
+                          <td className="py-2 pr-4 text-zinc-300 font-medium">{r.comp}</td>
+                          <td className="py-2 pr-4 text-zinc-500">{r.demo}</td>
+                          <td className="py-2 text-zinc-500">{r.prod}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="bg-zinc-800/50 rounded-lg p-3 mt-3 border border-zinc-700">
+                  <div className="flex items-start gap-2">
+                    <Lightbulb size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                    <p className="text-xs text-zinc-400">
+                      <strong className="text-zinc-300">The algorithms are identical</strong> — logistic regression
+                      is logistic regression whether you implement it in TypeScript or Python. The difference is
+                      scale, tooling, and ecosystem. Production systems use Python because of its rich ML ecosystem
+                      (NumPy, pandas, scikit-learn, PyTorch), not because the math is different.
+                    </p>
+                  </div>
+                </div>
+              </SectionCard>
+            </>
+          )}
+
           {/* ═══════════════════ GLOSSARY ═══════════════════ */}
           {activeSection === "glossary" && (
             <>
@@ -755,6 +1399,21 @@ export default function LearnPage({ onBack }: LearnPageProps) {
                     { term: "Hyperparameters", def: "Settings that control how a model learns (learning rate, max depth, K). Set before training, not learned from data." },
                     { term: "Cross-Validation", def: "Running multiple train/test splits to get a more reliable estimate of model performance." },
                     { term: "Persona", def: "A user archetype discovered through clustering, representing a group with similar behavioral patterns." },
+                    { term: "Entity", def: "The unit you're predicting about (e.g. user_id, session_id). Defines the granularity of your feature table." },
+                    { term: "Observation Time", def: "The point-in-time at which you make a prediction. Features must only use data from before this time." },
+                    { term: "Point-in-Time Join", def: "Joining feature values as they existed at a specific timestamp, preventing data leakage from future values." },
+                    { term: "Feature Contract", def: "A formal spec for a feature: inputs, time window, aggregation logic, freshness SLA, and owner." },
+                    { term: "Idempotent", def: "A transformation that produces the same output regardless of how many times it runs. Critical for reliable data pipelines." },
+                    { term: "Backfill", def: "Computing historical feature values retroactively. Needed when adding new features or fixing computation bugs." },
+                    { term: "Feature Drift", def: "When the statistical distribution of a feature changes over time, potentially degrading model performance." },
+                    { term: "MLflow", def: "Open-source platform for ML lifecycle management: experiment tracking, model registry, and deployment." },
+                    { term: "Feast", def: "Open-source feature store that manages feature computation, storage, and serving with point-in-time correctness." },
+                    { term: "Online Serving", def: "Real-time inference where features are fetched and predictions made in <100ms for a single request." },
+                    { term: "Batch Serving", def: "Offline inference where many predictions are computed at once (e.g. nightly), written to a table for later use." },
+                    { term: "GPU", def: "Graphics Processing Unit. Excels at parallel matrix operations needed for deep learning. Not required for classical ML." },
+                    { term: "TPU", def: "Tensor Processing Unit. Google's custom hardware optimized for large-scale neural network training." },
+                    { term: "L2 Regularization", def: "A penalty on large weights during training. Prevents the model from concentrating signal on a single feature, improving generalization." },
+                    { term: "Gradient Descent", def: "Optimization algorithm that iteratively adjusts model weights in the direction that reduces the loss function." },
                   ].map((g) => (
                     <div key={g.term} className="flex gap-4 px-5 py-3">
                       <span className="text-sm font-semibold text-zinc-200 shrink-0 w-44">{g.term}</span>
