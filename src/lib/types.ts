@@ -48,6 +48,8 @@ export interface TrainingResult {
   trainingLoss: number[];
   trainSize: number;
   testSize: number;
+  trainUserIds: string[];
+  testUserIds: string[];
   timestamp: string;
   config: TrainingConfig;
 }

@@ -35,6 +35,8 @@ import {
   User,
   BarChart3,
 } from "lucide-react";
+import InfoTooltip from "@/components/InfoTooltip";
+import CsvUpload from "@/components/CsvUpload";
 import {
   RadarChart,
   Radar,
@@ -53,6 +55,7 @@ import {
 
 interface PersonaPipelineProps {
   rawLogs: RawLogEntry[];
+  onDataUpload?: (csvText: string) => void;
 }
 
 const STEP_META: {
@@ -71,7 +74,7 @@ const STEP_META: {
   { label: "Onboarding Inference", description: "User → Persona → Onboarding", icon: <Rocket size={16} />, pipeline: "inference" },
 ];
 
-export default function PersonaPipeline({ rawLogs }: PersonaPipelineProps) {
+export default function PersonaPipeline({ rawLogs, onDataUpload }: PersonaPipelineProps) {
   const [activeStep, setActiveStep] = useState<PersonaPipelineStep>(0);
   const [kValue, setKValue] = useState(3);
   const [clusteringResult, setClusteringResult] = useState<ClusteringResult | null>(null);
@@ -271,8 +274,26 @@ export default function PersonaPipeline({ rawLogs }: PersonaPipelineProps) {
         {/* ─── Step 0: Raw Logs ─── */}
         {activeStep === 0 && (
           <div className="space-y-3">
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-300">
-              These are raw click events. No model can learn from this directly — it is just click history.
+            {onDataUpload && (
+              <CsvUpload onUpload={onDataUpload} currentRowCount={rawLogs.length} />
+            )}
+
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-300 flex items-start gap-2">
+              <div className="flex-1">
+                <strong>Raw click events.</strong> No model can learn from this directly — it is just click history.
+                Each row = one event. The same user has many rows.
+              </div>
+              <InfoTooltip
+                title="Step 0: What to Pay Attention To"
+                variant="warning"
+                wide
+                content={
+                  <>
+                    <p><strong>Data scientist:</strong> Check for data quality — missing user_ids, malformed timestamps, unexpected resource types. Garbage in = garbage out.</p>
+                    <p className="mt-1"><strong>Product:</strong> Confirm these events represent meaningful behavior. If analytics tracking is broken for some users, the model will learn the wrong patterns.</p>
+                  </>
+                }
+              />
             </div>
             <div className="border border-zinc-800 rounded-lg overflow-hidden">
               <div className="overflow-x-auto max-h-[360px]">
@@ -311,8 +332,23 @@ export default function PersonaPipeline({ rawLogs }: PersonaPipelineProps) {
         {/* ─── Step 1: Cleaned Logs ─── */}
         {activeStep === 1 && (
           <div className="space-y-3">
-            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300">
-              Metadata parsed into columns. Resource names cleaned. Still event-level — not ML-ready yet.
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300 flex items-start gap-2">
+              <div className="flex-1">
+                <strong>Metadata parsed into columns.</strong> Resource names cleaned and standardized. Still event-level — not ML-ready yet.
+                <span className="text-blue-400"> Transformation: JSON metadata → flat columns; name prefixes stripped; timestamp → hour.</span>
+              </div>
+              <InfoTooltip
+                title="Step 1: Cleaning Decisions Matter"
+                variant="info"
+                wide
+                content={
+                  <>
+                    <p><strong>Data scientist:</strong> Every cleaning decision is a modeling decision. Stripping name prefixes loses info — is that OK? Extracting hour instead of full timestamp loses day-of-week patterns.</p>
+                    <p className="mt-1"><strong>Product:</strong> Validate that device detection is correct. If &quot;unknown&quot; devices dominate, the mobile_ratio feature will be meaningless.</p>
+                    <p className="mt-1"><strong>Key rule:</strong> Document every transformation. Future you (or your teammate) needs to reproduce this exactly in the inference pipeline.</p>
+                  </>
+                }
+              />
             </div>
             <div className="border border-zinc-800 rounded-lg overflow-hidden">
               <div className="overflow-x-auto max-h-[360px]">
@@ -353,8 +389,28 @@ export default function PersonaPipeline({ rawLogs }: PersonaPipelineProps) {
         {/* ─── Step 2: Aggregated Features ─── */}
         {activeStep === 2 && (
           <div className="space-y-3">
-            <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 text-xs text-purple-300">
-              Events compressed into <strong>one row per user</strong>. Raw counts — already useful, but not ideal for ML yet.
+            <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 text-xs text-purple-300 flex items-start gap-2">
+              <div className="flex-1">
+                <strong>Events compressed into one row per user.</strong> Raw counts and ratios — this is the behavioral fingerprint.
+                <span className="text-purple-400"> Transformation: GROUP BY user_id → count(), count_distinct(), ratio(), avg().</span>
+              </div>
+              <InfoTooltip
+                title="Step 2: Aggregation is Feature Engineering"
+                variant="tip"
+                wide
+                content={
+                  <>
+                    <p><strong>Data scientist:</strong> This is where domain knowledge matters most. The features you choose to compute determine what the model can learn.</p>
+                    <p className="mt-1"><strong>Watch for:</strong></p>
+                    <ul className="mt-0.5 space-y-0.5">
+                      <li>- <strong>Users with very few events</strong> — their ratios are unstable (1 out of 2 events = 50% realtime!)</li>
+                      <li>- <strong>Time window:</strong> 30 days may be too short for infrequent users, too long for churned users</li>
+                      <li>- <strong>Missing features:</strong> Should you add session count, time between visits, recency?</li>
+                    </ul>
+                    <p className="mt-1"><strong>Product:</strong> Do these features align with how you think about user types? If not, add the missing signals.</p>
+                  </>
+                }
+              />
             </div>
             <div className="border border-zinc-800 rounded-lg overflow-hidden">
               <div className="overflow-x-auto max-h-[360px]">
@@ -395,8 +451,22 @@ export default function PersonaPipeline({ rawLogs }: PersonaPipelineProps) {
         {/* ─── Step 3: Final ML Features ─── */}
         {activeStep === 3 && (
           <div className="space-y-3">
-            <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-xs text-green-300">
-              This is the <strong>exact table the ML model sees</strong>. Ratios instead of raw counts = behavioral signals.
+            <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-xs text-green-300 flex items-start gap-2">
+              <div className="flex-1">
+                <strong>This is the exact table the ML model sees.</strong> Ratios instead of raw counts = behavioral signals that work across users with different activity levels.
+              </div>
+              <InfoTooltip
+                title="Step 3: Why Normalization Matters for Clustering"
+                variant="warning"
+                wide
+                content={
+                  <>
+                    <p><strong>Critical for K-Means:</strong> Clustering uses distance. If total_events ranges 1-500 but realtime_ratio ranges 0-1, the model will ignore ratios entirely because events dominate the distance calculation.</p>
+                    <p className="mt-1"><strong>Data scientist:</strong> The ML engine normalizes internally (z-score), but verify that the displayed values make sense. Color-coded cells help spot patterns before the algorithm does.</p>
+                    <p className="mt-1"><strong>Product:</strong> Can you eyeball 2-3 user types in this table? If humans can't see patterns, the model probably won't either.</p>
+                  </>
+                }
+              />
             </div>
             <div className="border border-zinc-800 rounded-lg overflow-hidden">
               <div className="overflow-x-auto max-h-[320px]">
@@ -437,8 +507,22 @@ export default function PersonaPipeline({ rawLogs }: PersonaPipelineProps) {
         {/* ─── Step 4: Pattern Intuition ─── */}
         {activeStep === 4 && (
           <div className="space-y-4">
-            <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3 text-xs text-cyan-300">
-              Even without ML, behavioral patterns emerge. The clustering algorithm will formalize these intuitions.
+            <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3 text-xs text-cyan-300 flex items-start gap-2">
+              <div className="flex-1">
+                <strong>Even without ML, behavioral patterns emerge.</strong> The clustering algorithm will formalize these intuitions into reproducible, data-driven segments.
+              </div>
+              <InfoTooltip
+                title="Step 4: Hypothesis Before Clustering"
+                variant="tip"
+                wide
+                content={
+                  <>
+                    <p><strong>Data scientist:</strong> Always form hypotheses before running the algorithm. If the clusters don't match any intuition, something may be wrong with the features.</p>
+                    <p className="mt-1"><strong>Product:</strong> These archetypes come from domain expertise. The ML will validate or challenge them — both outcomes are valuable.</p>
+                    <p className="mt-1"><strong>Key question:</strong> Are these personas <strong>actionable</strong>? If you can't change the product based on a persona, it's not useful even if it's statistically valid.</p>
+                  </>
+                }
+              />
             </div>
             <div className="grid grid-cols-3 gap-4">
               {/* Analyst archetype */}
@@ -502,6 +586,24 @@ export default function PersonaPipeline({ rawLogs }: PersonaPipelineProps) {
                   className="w-24 accent-blue-500"
                 />
                 <span className="text-sm font-bold text-blue-400 w-4">{kValue}</span>
+                <InfoTooltip
+                  title="Choosing K — How Many Personas?"
+                  variant="warning"
+                  wide
+                  content={
+                    <>
+                      <p><strong>K = number of clusters</strong> the algorithm will create. This is the most important hyperparameter in K-Means.</p>
+                      <p className="mt-1"><strong>How to choose:</strong></p>
+                      <ul className="mt-0.5 space-y-0.5">
+                        <li>- <strong>Too few (K=2):</strong> Oversimplified — merges distinct user types</li>
+                        <li>- <strong>Too many (K=5+):</strong> Overfitted — splits real groups into noise</li>
+                        <li>- <strong>Elbow method:</strong> Plot inertia vs K, pick where it bends</li>
+                        <li>- <strong>Business rule:</strong> Can your product realistically support K different onboarding flows?</li>
+                      </ul>
+                      <p className="mt-1">Try different values and see if the personas stay interpretable.</p>
+                    </>
+                  }
+                />
               </div>
               <button
                 onClick={handleRunClustering}
@@ -606,8 +708,22 @@ export default function PersonaPipeline({ rawLogs }: PersonaPipelineProps) {
         {/* ─── Step 6: Persona Interpretation ─── */}
         {activeStep === 6 && clusteringResult && (
           <div className="space-y-4">
-            <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 text-xs text-purple-300">
-              Clusters translated into <strong>actionable personas</strong>. Each maps to a specific onboarding experience.
+            <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 text-xs text-purple-300 flex items-start gap-2">
+              <div className="flex-1">
+                <strong>Clusters translated into actionable personas.</strong> Each maps to a specific onboarding experience. This is where ML meets product decisions.
+              </div>
+              <InfoTooltip
+                title="Step 6: From Clusters to Product Decisions"
+                variant="warning"
+                wide
+                content={
+                  <>
+                    <p><strong>Data scientist:</strong> Cluster interpretation is subjective. Validate with stakeholders. Run multiple K values and check if the same personas emerge consistently.</p>
+                    <p className="mt-1"><strong>Product:</strong> Each persona needs a <strong>different product action</strong>. If two personas get the same onboarding, merge them — the distinction isn't useful.</p>
+                    <p className="mt-1"><strong>Monitoring:</strong> Track persona distribution over time. If one persona grows from 20% to 80%, your user base changed — retrain the model.</p>
+                  </>
+                }
+              />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {clusteringResult.personas.map((persona) => {
@@ -732,9 +848,28 @@ export default function PersonaPipeline({ rawLogs }: PersonaPipelineProps) {
               </div>
             ) : (
               <>
-                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-xs text-green-300">
-                  <strong>Real-time inference:</strong> A user just logged in — compute their features → find nearest cluster → serve personalized onboarding.
-                  The model doesn&apos;t decide once — it <strong>updates as behavior changes</strong>.
+                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-xs text-green-300 flex items-start gap-2">
+                  <div className="flex-1">
+                    <strong>Real-time inference:</strong> A user just logged in — compute their features → find nearest cluster → serve personalized onboarding.
+                    The model doesn&apos;t decide once — it <strong>updates as behavior changes</strong>.
+                  </div>
+                  <InfoTooltip
+                    title="Step 7: Inference Pipeline — Production Concerns"
+                    variant="warning"
+                    wide
+                    content={
+                      <>
+                        <p><strong>Data scientist:</strong> The inference pipeline must use the <strong>exact same feature computation</strong> as training. Any mismatch = training/serving skew — the #1 cause of ML failures in production.</p>
+                        <p className="mt-1"><strong>Product:</strong> Monitor the distribution of persona assignments over time. If it shifts dramatically, either the model is stale or the user base changed.</p>
+                        <p className="mt-1"><strong>Edge cases:</strong></p>
+                        <ul className="mt-0.5 space-y-0.5">
+                          <li>- <strong>New users with 0 events</strong> — need a fallback onboarding</li>
+                          <li>- <strong>Users near cluster boundaries</strong> — small changes flip their persona</li>
+                          <li>- <strong>Stale models</strong> — retrain monthly or when data distribution shifts</li>
+                        </ul>
+                      </>
+                    }
+                  />
                 </div>
 
                 {/* Inference Input */}

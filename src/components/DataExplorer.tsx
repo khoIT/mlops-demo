@@ -17,12 +17,15 @@ import {
   Layers,
   Tag,
 } from "lucide-react";
+import InfoTooltip from "@/components/InfoTooltip";
+import CsvUpload from "@/components/CsvUpload";
 
 interface DataExplorerProps {
   rawLogs: RawLogEntry[];
   featureData: UserFeatureRow[];
   features: FeatureDefinition[];
   onFeaturesChange: (features: FeatureDefinition[]) => void;
+  onDataUpload?: (csvText: string) => void;
 }
 
 type SubTab = "raw_data" | "feature_store" | "data_profile";
@@ -31,6 +34,7 @@ export default function DataExplorer({
   rawLogs,
   featureData,
   features,
+  onDataUpload,
 }: DataExplorerProps) {
   const [subTab, setSubTab] = useState<SubTab>("raw_data");
   const [searchTerm, setSearchTerm] = useState("");
@@ -120,12 +124,28 @@ export default function DataExplorer({
       {/* ─── Raw Data Table ─── */}
       {subTab === "raw_data" && (
         <div className="space-y-3">
+          {onDataUpload && (
+            <CsvUpload onUpload={onDataUpload} currentRowCount={rawLogs.length} />
+          )}
+
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Eye size={16} className="text-blue-400" />
               <span className="text-sm text-zinc-400">
                 {rawLogs.length} events from {profileStats.userCounts.size} users
               </span>
+              <InfoTooltip
+                title="Raw Data — Why This Matters"
+                variant="info"
+                wide
+                content={
+                  <>
+                    <p>This is the <strong>rawest form</strong> of your data — click-level events straight from the analytics system.</p>
+                    <p className="mt-1"><strong>What to check:</strong> Look for missing values, unexpected resource types, time gaps, and users with suspiciously high/low activity. Data quality issues here cascade into bad models.</p>
+                    <p className="mt-1"><strong>No model can learn from this directly</strong> — it needs to be aggregated into user-level features first.</p>
+                  </>
+                }
+              />
             </div>
             <div className="relative">
               <Search
@@ -267,6 +287,24 @@ export default function DataExplorer({
             <span className="text-xs text-zinc-500">
               &mdash; Computed features from {featureData.length} users
             </span>
+            <InfoTooltip
+              title="Feature Store — The Bridge to ML"
+              variant="tip"
+              wide
+              content={
+                <>
+                  <p>Features are <strong>numeric signals</strong> computed from raw events. This is what the ML model actually sees.</p>
+                  <p className="mt-1"><strong>Data scientist must check:</strong></p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    <li>- Are features <strong>predictive</strong>? (correlated with the target)</li>
+                    <li>- Any <strong>data leakage</strong>? (feature that &quot;cheats&quot; by using future info)</li>
+                    <li>- Are ranges reasonable? (no extreme outliers)</li>
+                    <li>- Is the <strong>feature engineering logic correct</strong>?</li>
+                  </ul>
+                  <p className="mt-1">Bad features = bad model, no matter how fancy the algorithm.</p>
+                </>
+              }
+            />
           </div>
 
           {/* Feature definitions */}
@@ -341,6 +379,22 @@ export default function DataExplorer({
             <h3 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
               <ChevronRight size={14} className="text-amber-400" />
               Available Target Variables
+              <InfoTooltip
+                title="Target Variables — What You're Predicting"
+                variant="warning"
+                wide
+                content={
+                  <>
+                    <p>The target variable is the <strong>answer column</strong> — what you want the model to predict for new users.</p>
+                    <p className="mt-1"><strong>Pay attention to:</strong></p>
+                    <ul className="mt-0.5 space-y-0.5">
+                      <li>- <strong>Class balance:</strong> If 95% of users are &quot;not power users&quot;, the model can cheat by always predicting &quot;no&quot;</li>
+                      <li>- <strong>Label quality:</strong> Are these labels actually correct and consistent?</li>
+                      <li>- <strong>Business meaning:</strong> Does predicting this actually help make a decision?</li>
+                    </ul>
+                  </>
+                }
+              />
             </h3>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
               {TARGET_VARIABLES.map((tv) => (
@@ -429,6 +483,27 @@ export default function DataExplorer({
       {/* ─── Data Profile ─── */}
       {subTab === "data_profile" && (
         <div className="space-y-6">
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart3 size={16} className="text-green-400" />
+            <span className="text-sm text-zinc-300 font-semibold">Data Profile</span>
+            <InfoTooltip
+              title="Data Profiling — First Step in Any ML Project"
+              variant="tip"
+              wide
+              content={
+                <>
+                  <p>Before building any model, <strong>understand your data distributions</strong>. This catches problems early.</p>
+                  <p className="mt-1"><strong>What to look for:</strong></p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    <li>- <strong>Skewed distributions:</strong> If one resource type dominates, the model may be biased toward it</li>
+                    <li>- <strong>Power users:</strong> A few users with extreme activity can distort averages</li>
+                    <li>- <strong>Device mix:</strong> If 90% is desktop, mobile predictions will be unreliable</li>
+                    <li>- <strong>Data volume:</strong> Do you have enough events per user for stable features?</li>
+                  </ul>
+                </>
+              }
+            />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Resource Type Distribution */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5">

@@ -16,7 +16,9 @@ import DataExplorer from "@/components/DataExplorer";
 import FeatureTraining from "@/components/FeatureTraining";
 import ModelTesting from "@/components/ModelTesting";
 import PersonaPipeline from "@/components/PersonaPipeline";
-import { Database, Cpu, GitBranch } from "lucide-react";
+import LearnPage from "@/components/LearnPage";
+import { InfoBanner } from "@/components/InfoTooltip";
+import { Database, Cpu, GitBranch, BookOpen } from "lucide-react";
 
 export default function Home() {
   const [currentStep, setCurrentStep] = useState<PipelineStep>("data_explorer");
@@ -26,6 +28,7 @@ export default function Home() {
   const [experiments, setExperiments] = useState<ExperimentRun[]>([]);
   const [activeModel, setActiveModel] = useState<TrainingResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showLearn, setShowLearn] = useState(false);
 
   useEffect(() => {
     fetch("/raw-logs.csv")
@@ -53,6 +56,19 @@ export default function Home() {
 
   const handleModelReady = useCallback((result: TrainingResult) => {
     setActiveModel(result);
+  }, []);
+
+  const handleDataUpload = useCallback((csvText: string) => {
+    const parsed = Papa.parse<RawLogEntry>(csvText, {
+      header: true,
+      skipEmptyLines: true,
+    });
+    const logs = parseRawLogs(parsed.data);
+    setRawLogs(logs);
+    const userData = computeUserFeatures(logs);
+    setFeatureData(userData);
+    setActiveModel(null);
+    setExperiments([]);
   }, []);
 
   if (isLoading) {
@@ -95,17 +111,62 @@ export default function Home() {
                 <span>Model active</span>
               </div>
             )}
+            <button
+              onClick={() => setShowLearn(!showLearn)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                showLearn
+                  ? "bg-blue-600/20 border-blue-500/40 text-blue-400"
+                  : "border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+              }`}
+            >
+              <BookOpen size={12} />
+              Learn
+            </button>
           </div>
         </div>
       </header>
 
+      {showLearn ? (
+        <main className="max-w-[1600px] mx-auto px-6 py-6 pb-12">
+          <LearnPage onBack={() => setShowLearn(false)} />
+        </main>
+      ) : (
+        <>
       {/* ─── Pipeline Steps ─── */}
-      <div className="max-w-[1600px] mx-auto px-6 py-4">
+      <div className="max-w-[1600px] mx-auto px-6 py-4 space-y-3">
         <StepIndicator
           currentStep={currentStep}
           onStepChange={setCurrentStep}
           hasModel={!!activeModel}
         />
+        {/* Workflow comparison banner */}
+        <InfoBanner title="Two ML Workflows — What's the difference?" variant="info">
+          <div className="grid grid-cols-2 gap-4 mt-1">
+            <div>
+              <div className="font-semibold text-blue-400 mb-1">Experiments (Tabs 1-3): Supervised Learning</div>
+              <ul className="space-y-0.5 text-zinc-500">
+                <li>- You pick a <strong className="text-zinc-300">target variable</strong> with known labels (e.g. is_power_user)</li>
+                <li>- The model learns from labeled examples (Logistic Regression / Decision Tree)</li>
+                <li>- Output: a class prediction + probability</li>
+                <li>- Evaluated with accuracy, precision, recall, F1, confusion matrix</li>
+                <li>- Use case: &quot;predict any binary outcome from user behavior&quot;</li>
+              </ul>
+            </div>
+            <div>
+              <div className="font-semibold text-purple-400 mb-1">Persona Pipeline (Tab 4): Unsupervised Learning</div>
+              <ul className="space-y-0.5 text-zinc-500">
+                <li>- <strong className="text-zinc-300">No labels needed</strong> — the algorithm discovers structure on its own</li>
+                <li>- K-Means clustering groups users by behavioral similarity</li>
+                <li>- Output: a persona assignment + onboarding recommendation</li>
+                <li>- Evaluated with inertia, centroid profiles, cluster separation</li>
+                <li>- Use case: &quot;who is this user → what onboarding to show them&quot;</li>
+              </ul>
+            </div>
+          </div>
+          <div className="mt-2 pt-2 border-t border-zinc-800 text-zinc-500">
+            <strong className="text-zinc-300">Key insight:</strong> ML isn&apos;t always about prediction accuracy. Sometimes the value is in <strong className="text-zinc-300">discovering structure</strong> you didn&apos;t know existed and <strong className="text-zinc-300">automating a product decision</strong> based on it.
+          </div>
+        </InfoBanner>
       </div>
 
       {/* ─── Main Content ─── */}
@@ -116,6 +177,7 @@ export default function Home() {
             featureData={featureData}
             features={features}
             onFeaturesChange={setFeatures}
+            onDataUpload={handleDataUpload}
           />
         )}
 
@@ -137,9 +199,11 @@ export default function Home() {
         )}
 
         {currentStep === "persona_pipeline" && (
-          <PersonaPipeline rawLogs={rawLogs} />
+          <PersonaPipeline rawLogs={rawLogs} onDataUpload={handleDataUpload} />
         )}
       </main>
+        </>
+      )}
     </div>
   );
 }

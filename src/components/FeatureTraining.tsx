@@ -21,6 +21,7 @@ import {
   Grid3X3,
   Sparkles,
 } from "lucide-react";
+import InfoTooltip from "@/components/InfoTooltip";
 import {
   LineChart,
   Line,
@@ -165,6 +166,22 @@ export default function FeatureTraining({
             <span className="text-sm font-semibold text-zinc-200">
               Target Variable
             </span>
+            <InfoTooltip
+              title="Choosing the Right Target"
+              variant="warning"
+              wide
+              content={
+                <>
+                  <p>The target variable is <strong>what the model learns to predict</strong>. This is the most important decision in supervised ML.</p>
+                  <p className="mt-1"><strong>Watch out for:</strong></p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    <li>- <strong>Class imbalance:</strong> If one class has 90%+ of examples, accuracy is misleading</li>
+                    <li>- <strong>Leaky features:</strong> Features computed from the same data as the label can inflate accuracy</li>
+                    <li>- <strong>Actionability:</strong> Can you actually do something different based on this prediction?</li>
+                  </ul>
+                </>
+              }
+            />
           </div>
           <div className="space-y-2">
             {TARGET_VARIABLES.map((tv) => (
@@ -201,6 +218,23 @@ export default function FeatureTraining({
               <span className="text-sm font-semibold text-zinc-200">
                 Input Features
               </span>
+              <InfoTooltip
+                title="Feature Selection Tips"
+                variant="tip"
+                wide
+                content={
+                  <>
+                    <p>Not all features help. Some add <strong>noise</strong> that hurts the model.</p>
+                    <p className="mt-1"><strong>Best practices:</strong></p>
+                    <ul className="mt-0.5 space-y-0.5">
+                      <li>- Start with <strong>fewer features</strong> and add more only if metrics improve</li>
+                      <li>- Remove features that are <strong>highly correlated</strong> with each other (redundant)</li>
+                      <li>- Check <strong>feature importance</strong> after training — drop features near zero</li>
+                      <li>- Never include the target itself or a proxy of it as a feature</li>
+                    </ul>
+                  </>
+                }
+              />
             </div>
             <span className="text-xs text-zinc-500">
               {selectedFeatures.length}/{features.length} selected
@@ -238,6 +272,23 @@ export default function FeatureTraining({
             <span className="text-sm font-semibold text-zinc-200">
               Model Configuration
             </span>
+            <InfoTooltip
+              title="Hyperparameter Tuning"
+              variant="info"
+              wide
+              content={
+                <>
+                  <p>Hyperparameters control <strong>how the model learns</strong>, not what it learns.</p>
+                  <p className="mt-1"><strong>Key decisions:</strong></p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    <li>- <strong>Logistic Regression:</strong> Simple, interpretable, good baseline. Tune learning rate and epochs.</li>
+                    <li>- <strong>Decision Tree:</strong> Handles non-linear patterns. Tune max depth to prevent overfitting.</li>
+                    <li>- <strong>Test split:</strong> 20-30% is standard. Too small = unreliable metrics. Too large = less training data.</li>
+                    <li>- <strong>Learning rate:</strong> Too high = unstable. Too low = slow convergence. Start at 0.1.</li>
+                  </ul>
+                </>
+              }
+            />
           </div>
 
           <div className="space-y-3">
@@ -422,6 +473,23 @@ export default function FeatureTraining({
         {activeResult ? (
           <div className="space-y-4">
             {/* Metric Cards */}
+            <div className="bg-zinc-800/50 rounded-lg p-3 mb-3 flex items-start gap-2">
+              <InfoTooltip
+                title="Reading Model Metrics"
+                variant="tip"
+                wide
+                content={
+                  <>
+                    <p><strong>Accuracy</strong> = % of all predictions that are correct. Can be misleading with imbalanced data.</p>
+                    <p className="mt-1"><strong>Precision</strong> = When the model says &quot;yes&quot;, how often is it right? High precision = few false alarms.</p>
+                    <p className="mt-1"><strong>Recall</strong> = Of all actual &quot;yes&quot; cases, how many did the model catch? High recall = few misses.</p>
+                    <p className="mt-1"><strong>F1 Score</strong> = Balance between precision and recall. Best single metric for imbalanced datasets.</p>
+                    <p className="mt-1 text-amber-400">If accuracy is high but F1 is low, the model is likely guessing the majority class.</p>
+                  </>
+                }
+              />
+              <span className="text-[11px] text-zinc-500">Hover the info icon to learn what each metric means and when to trust it</span>
+            </div>
             <div className="grid grid-cols-4 gap-3">
               {[
                 {
@@ -467,6 +535,21 @@ export default function FeatureTraining({
                 <h3 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
                   <TrendingDown size={14} className="text-red-400" />
                   Training Loss
+                  <InfoTooltip
+                    title="Loss Curve — Is Training Working?"
+                    variant="info"
+                    content={
+                      <>
+                        <p>The loss curve shows <strong>how wrong the model is</strong> over time. It should decrease and flatten.</p>
+                        <p className="mt-1"><strong>Red flags:</strong></p>
+                        <ul className="mt-0.5 space-y-0.5">
+                          <li>- <strong>Not decreasing:</strong> Learning rate may be too low, or features aren&apos;t predictive</li>
+                          <li>- <strong>Oscillating:</strong> Learning rate too high</li>
+                          <li>- <strong>Flat from start:</strong> Model can&apos;t learn anything useful from these features</li>
+                        </ul>
+                      </>
+                    }
+                  />
                 </h3>
                 <ResponsiveContainer width="100%" height={200}>
                   <LineChart data={lossData}>
@@ -504,6 +587,21 @@ export default function FeatureTraining({
                 <h3 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
                   <BarChart3 size={14} className="text-blue-400" />
                   Feature Importance
+                  <InfoTooltip
+                    title="Feature Importance — What Drives Predictions?"
+                    variant="tip"
+                    content={
+                      <>
+                        <p>Shows which features the model relies on most.</p>
+                        <p className="mt-1"><strong>What to do:</strong></p>
+                        <ul className="mt-0.5 space-y-0.5">
+                          <li>- Features near <strong>zero</strong> can likely be removed</li>
+                          <li>- If one feature dominates, the model may be <strong>overfitting</strong> to it</li>
+                          <li>- Validate that top features make <strong>business sense</strong></li>
+                        </ul>
+                      </>
+                    }
+                  />
                 </h3>
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={importanceData} layout="vertical">
@@ -546,6 +644,26 @@ export default function FeatureTraining({
               <h3 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
                 <Grid3X3 size={14} className="text-purple-400" />
                 Confusion Matrix
+                <InfoTooltip
+                  title="Confusion Matrix — Where the Model Fails"
+                  variant="warning"
+                  wide
+                  content={
+                    <>
+                      <p>
+                        Shows <strong>exactly where</strong> the model gets confused. Rows = actual, columns = predicted.
+                      </p>
+                      <p className="mt-1">
+                        <strong>Green diagonal</strong> = correct predictions. <strong>Red off-diagonal</strong> = mistakes.
+                      </p>
+                      <p className="mt-1">
+                        <strong>Product decision:</strong> Are false positives or false negatives worse for your use case? A spam
+                        filter should minimize false negatives (missed spam), while a fraud detector should minimize false
+                        positives (blocked legit users).
+                      </p>
+                    </>
+                  }
+                />
               </h3>
               <div className="flex items-center gap-6">
                 <div className="overflow-auto">

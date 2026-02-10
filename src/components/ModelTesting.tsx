@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   UserFeatureRow,
   TrainingResult,
@@ -18,6 +18,7 @@ import {
   ArrowRight,
   Shuffle,
 } from "lucide-react";
+import InfoTooltip from "@/components/InfoTooltip";
 import {
   BarChart,
   Bar,
@@ -45,6 +46,7 @@ export default function ModelTesting({
     PredictionResult[]
   >([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [showSplitInfo, setShowSplitInfo] = useState(false);
 
   const featureNames = trainingResult?.config.features || [];
 
@@ -126,6 +128,22 @@ export default function ModelTesting({
             <span className="text-sm font-semibold text-zinc-200">
               Active Model
             </span>
+            <InfoTooltip
+              title="Model Registry — Deployment"
+              variant="info"
+              wide
+              content={
+                <>
+                  <p>This is the <strong>trained model</strong> currently serving predictions. In production, this would be behind an API endpoint.</p>
+                  <p className="mt-1"><strong>Before deploying, verify:</strong></p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    <li>- Metrics are stable across multiple training runs</li>
+                    <li>- The model performs well on <strong>edge cases</strong>, not just average users</li>
+                    <li>- Feature computation in production matches training (no training/serving skew)</li>
+                  </ul>
+                </>
+              }
+            />
             <span className="ml-auto text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
               deployed
             </span>
@@ -177,6 +195,21 @@ export default function ModelTesting({
             <span className="text-sm font-semibold text-zinc-200">
               Load Test Data
             </span>
+            <InfoTooltip
+              title="Testing — Catch Problems Before Production"
+              variant="warning"
+              content={
+                <>
+                  <p>Test with <strong>real user data</strong> to see if predictions make sense.</p>
+                  <p className="mt-1"><strong>Key checks:</strong></p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    <li>- Do predictions match your <strong>intuition</strong> for known users?</li>
+                    <li>- Try <strong>extreme values</strong> — does the model handle them?</li>
+                    <li>- Test users from <strong>different segments</strong> (new vs veteran)</li>
+                  </ul>
+                </>
+              }
+            />
           </div>
           <div className="flex gap-2 mb-3">
             <select
@@ -202,6 +235,54 @@ export default function ModelTesting({
           <p className="text-[10px] text-zinc-600">
             Load real user data to test, or manually enter values below
           </p>
+
+          {/* Train/Test Split Info */}
+          <button
+            onClick={() => setShowSplitInfo(!showSplitInfo)}
+            className="w-full mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors border border-zinc-800"
+          >
+            <Shield size={10} />
+            {showSplitInfo ? "Hide" : "Show"} train/test split ({trainingResult.trainSize} train, {trainingResult.testSize} test)
+          </button>
+          {showSplitInfo && (
+            <div className="mt-2 bg-zinc-800/50 rounded-lg p-3 space-y-2 border border-zinc-700">
+              <div>
+                <div className="text-[10px] font-semibold text-amber-400 mb-1 flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  Training Set ({trainingResult.trainUserIds.length} users) — excluded from testing
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {trainingResult.trainUserIds.map((uid) => (
+                    <span
+                      key={uid}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-amber-500/10 text-amber-400/80 border border-amber-500/20"
+                    >
+                      {uid}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold text-green-400 mb-1 flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                  Test Set ({trainingResult.testUserIds.length} users) — used for evaluation metrics
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {trainingResult.testUserIds.map((uid) => (
+                    <span
+                      key={uid}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-green-500/10 text-green-400/80 border border-green-500/20"
+                    >
+                      {uid}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="text-[10px] text-zinc-600 pt-1 border-t border-zinc-700">
+                The model was trained on amber users and evaluated on green users. You can load any user for prediction, but predictions on training users may appear artificially confident.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Feature Inputs */}
@@ -273,6 +354,16 @@ export default function ModelTesting({
                 <span className="text-lg font-bold text-zinc-200">
                   Prediction Result
                 </span>
+                <InfoTooltip
+                  title="Interpreting Predictions"
+                  variant="tip"
+                  content={
+                    <>
+                      <p>The prediction shows the model&apos;s <strong>best guess</strong> plus confidence (probability).</p>
+                      <p className="mt-1"><strong>Low confidence?</strong> The user may be near a decision boundary — the model is unsure. Consider adding more features or more training data for these edge cases.</p>
+                    </>
+                  }
+                />
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
@@ -372,6 +463,16 @@ export default function ModelTesting({
             <h3 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
               <FileBarChart size={14} className="text-blue-400" />
               Prediction History
+              <InfoTooltip
+                title="Prediction History — Spot Patterns"
+                variant="info"
+                content={
+                  <>
+                    <p>Track predictions over time to spot <strong>systematic biases</strong>.</p>
+                    <p className="mt-1">If the model always predicts the same class, it may be overfit or the features aren&apos;t discriminative enough.</p>
+                  </>
+                }
+              />
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">

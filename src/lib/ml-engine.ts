@@ -135,7 +135,7 @@ export const TARGET_VARIABLES: FeatureDefinition[] = [
     id: "is_power_user",
     name: "Is Power User",
     description:
-      "Binary: user has >5 sessions AND uses >2 resource types (engagement prediction)",
+      "Binary: user is in the top 25% for BOTH session count AND resource type diversity (scales with dataset size)",
     type: "categorical",
     source: "engineered",
     enabled: true,
@@ -169,6 +169,17 @@ export function computeUserFeatures(
     userMap.get(log.user_id)!.push(log);
   }
 
+  // Helper: compute the value at a given percentile (0-100) from a sorted array
+  function percentile(sorted: number[], p: number): number {
+    if (sorted.length === 0) return 0;
+    const idx = (p / 100) * (sorted.length - 1);
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    if (lo === hi) return sorted[lo];
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+  }
+
+  // First pass: compute all features without target labels
   const rows: UserFeatureRow[] = [];
   for (const [userId, userLogs] of userMap) {
     const sessionCount = userLogs.length;
@@ -216,11 +227,6 @@ export function computeUserFeatures(
           ) / 10
         : 0;
 
-    // Target variables
-    const isPowerUser =
-      sessionCount > 5 && resourceTypes.size > 2 ? "yes" : "no";
-    const willExport = exportCount > 0 ? "yes" : "no";
-
     // Primary resource type (most visited)
     const typeCounts = new Map<string, number>();
     for (const l of userLogs) {
@@ -252,11 +258,31 @@ export function computeUserFeatures(
         Math.round((homeCount / sessionCount) * 1000) / 1000,
       avg_hour: avgHour,
       activity_span_hours: activitySpan,
-      // targets
-      is_power_user: isPowerUser,
-      will_export: willExport,
+      // targets — assigned in second pass below
+      is_power_user: "no",
+      will_export: "no",
       primary_resource: primaryResource,
     });
+  }
+
+  // Second pass: assign target labels using percentile-based thresholds
+  // This scales with any dataset size instead of using hardcoded cutoffs
+  const sortedSessions = rows.map((r) => Number(r.session_count)).sort((a, b) => a - b);
+  const sortedResourceTypes = rows.map((r) => Number(r.unique_resource_types)).sort((a, b) => a - b);
+  const sortedExports = rows.map((r) => Number(r.export_count)).sort((a, b) => a - b);
+
+  const sessionP75 = percentile(sortedSessions, 75);
+  const resourceTypesP75 = percentile(sortedResourceTypes, 75);
+  const exportP75 = percentile(sortedExports, 75);
+
+  for (const row of rows) {
+    const sc = Number(row.session_count);
+    const rt = Number(row.unique_resource_types);
+    const ec = Number(row.export_count);
+    // is_power_user: top 25% in BOTH session count AND resource diversity
+    row.is_power_user = sc >= sessionP75 && rt >= resourceTypesP75 ? "yes" : "no";
+    // will_export: top 25% in export activity (or any export if most users have 0)
+    row.will_export = exportP75 > 0 ? (ec >= exportP75 ? "yes" : "no") : (ec > 0 ? "yes" : "no");
   }
 
   return rows;
@@ -606,10 +632,14 @@ export function trainModel(
     [indices[i], indices[j]] = [indices[j], indices[i]];
   }
 
-  const trainX = indices.slice(0, splitIdx).map((i) => X[i]);
-  const trainY = indices.slice(0, splitIdx).map((i) => y[i]);
-  const testX = indices.slice(splitIdx).map((i) => X[i]);
-  const testY = indices.slice(splitIdx).map((i) => y[i]);
+  const trainIndices = indices.slice(0, splitIdx);
+  const testIndices = indices.slice(splitIdx);
+  const trainX = trainIndices.map((i) => X[i]);
+  const trainY = trainIndices.map((i) => y[i]);
+  const testX = testIndices.map((i) => X[i]);
+  const testY = testIndices.map((i) => y[i]);
+  const trainUserIds = trainIndices.map((i) => String(featureData[i].user_id));
+  const testUserIds = testIndices.map((i) => String(featureData[i].user_id));
 
   let predictions: string[];
   let losses: number[] = [];
@@ -700,6 +730,8 @@ export function trainModel(
     trainingLoss: losses,
     trainSize: trainX.length,
     testSize: testX.length,
+    trainUserIds,
+    testUserIds,
     timestamp: new Date().toISOString(),
     config,
   };
