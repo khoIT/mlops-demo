@@ -26,10 +26,48 @@ export default function Home() {
   const [rawLogs, setRawLogs] = useState<RawLogEntry[]>([]);
   const [featureData, setFeatureData] = useState<UserFeatureRow[]>([]);
   const [features, setFeatures] = useState<FeatureDefinition[]>(DEFAULT_FEATURES);
-  const [experiments, setExperiments] = useState<ExperimentRun[]>([]);
-  const [activeModel, setActiveModel] = useState<TrainingResult | null>(null);
+  const [experiments, setExperiments] = useState<ExperimentRun[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("mlops_experiments");
+        return saved ? JSON.parse(saved) : [];
+      } catch { return []; }
+    }
+    return [];
+  });
+  const [activeModel, setActiveModel] = useState<TrainingResult | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("mlops_active_model");
+        return saved ? JSON.parse(saved) : null;
+      } catch { return null; }
+    }
+    return null;
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [showLearn, setShowLearn] = useState(false);
+
+  // Persist experiments to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("mlops_experiments", JSON.stringify(experiments));
+    } catch (e) {
+      console.warn("Failed to save experiments to localStorage:", e);
+    }
+  }, [experiments]);
+
+  // Persist active model to localStorage
+  useEffect(() => {
+    try {
+      if (activeModel) {
+        localStorage.setItem("mlops_active_model", JSON.stringify(activeModel));
+      } else {
+        localStorage.removeItem("mlops_active_model");
+      }
+    } catch (e) {
+      console.warn("Failed to save active model to localStorage:", e);
+    }
+  }, [activeModel]);
 
   useEffect(() => {
     fetch("/raw-logs.csv")
@@ -58,6 +96,18 @@ export default function Home() {
   const handleModelReady = useCallback((result: TrainingResult) => {
     setActiveModel(result);
   }, []);
+
+  const handleDeleteExperiment = useCallback((experimentId: string) => {
+    setExperiments((prev) => {
+      const updated = prev.filter((e) => e.id !== experimentId);
+      // If we deleted the active model's experiment, clear it
+      const deleted = prev.find((e) => e.id === experimentId);
+      if (deleted && activeModel && deleted.result.modelId === activeModel.modelId) {
+        setActiveModel(null);
+      }
+      return updated;
+    });
+  }, [activeModel]);
 
   const handleDataUpload = useCallback((csvText: string) => {
     const parsed = Papa.parse<RawLogEntry>(csvText, {
@@ -196,6 +246,7 @@ export default function Home() {
             experiments={experiments}
             onExperimentComplete={handleExperimentComplete}
             onModelReady={handleModelReady}
+            onDeleteExperiment={handleDeleteExperiment}
           />
         )}
 

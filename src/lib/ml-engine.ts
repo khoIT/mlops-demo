@@ -619,6 +619,8 @@ export function trainModel(
   featureData: UserFeatureRow[],
   config: TrainingConfig
 ): TrainingResult {
+  const startTime = performance.now();
+
   // Prepare X and y
   const X: number[][] = [];
   const y: string[] = [];
@@ -651,6 +653,7 @@ export function trainModel(
   const testUserIds = testIndices.map((i) => String(featureData[i].user_id));
 
   let predictions: string[];
+  let trainPredictions: string[];
   let losses: number[] = [];
   let featureImportance: number[];
 
@@ -664,6 +667,7 @@ export function trainModel(
     );
     currentModel = model;
     predictions = predictLogistic(model, testX);
+    trainPredictions = predictLogistic(model, trainX);
     losses = trainLosses;
     featureImportance = model.weights[0].map((w) => Math.abs(w));
     const maxImp = Math.max(...featureImportance) || 1;
@@ -685,6 +689,7 @@ export function trainModel(
 
     const { normalized: testNorm } = normalize(testX, { means, stds });
     predictions = testNorm.map((row) => predictTree(root, row));
+    trainPredictions = normalized.map((row) => predictTree(root, row));
     featureImportance = getFeatureImportanceTree(root, config.features.length);
 
     // Simulated loss curve for tree
@@ -705,23 +710,82 @@ export function trainModel(
   const correct = testY.filter((v, i) => v === predictions[i]).length;
   const accuracy = Math.round((correct / testY.length) * 10000) / 10000;
 
-  // Per-class precision/recall, then macro average
+  // Train accuracy (for overfitting detection)
+  const trainCorrect = trainY.filter((v, i) => v === trainPredictions[i]).length;
+  const trainAccuracy = Math.round((trainCorrect / trainY.length) * 10000) / 10000;
+
+  // Per-class precision/recall/specificity, then macro average
   let totalPrecision = 0;
   let totalRecall = 0;
+  let totalSpecificity = 0;
+  const totalSamples = testY.length;
   for (let c = 0; c < classes.length; c++) {
     const tp = cm[c][c];
     const fpPlusTp = classes.reduce((sum, _, r) => sum + cm[r][c], 0);
     const fnPlusTp = cm[c].reduce((a, b) => a + b, 0);
+    const fp = fpPlusTp - tp;
+    const fn = fnPlusTp - tp;
+    const tn = totalSamples - tp - fp - fn;
     totalPrecision += fpPlusTp > 0 ? tp / fpPlusTp : 0;
     totalRecall += fnPlusTp > 0 ? tp / fnPlusTp : 0;
+    totalSpecificity += (tn + fp) > 0 ? tn / (tn + fp) : 0;
   }
   const precision = Math.round((totalPrecision / classes.length) * 10000) / 10000;
   const recall = Math.round((totalRecall / classes.length) * 10000) / 10000;
+  const specificity = Math.round((totalSpecificity / classes.length) * 10000) / 10000;
   const f1 =
     precision + recall > 0
       ? Math.round(((2 * precision * recall) / (precision + recall)) * 10000) /
         10000
       : 0;
+
+  // Log Loss (cross-entropy on test set, approximated from accuracy)
+  const logLossVal = (() => {
+    let ll = 0;
+    for (let i = 0; i < testY.length; i++) {
+      const isCorrect = testY[i] === predictions[i] ? 1 : 0;
+      // Approximate probability from confusion matrix
+      const actual = classes.indexOf(testY[i]);
+      const rowTotal = cm[actual].reduce((a, b) => a + b, 0);
+      const prob = rowTotal > 0 ? Math.max(cm[actual][classes.indexOf(predictions[i])] / rowTotal, 1e-10) : 1e-10;
+      ll -= isCorrect ? Math.log(Math.max(prob, 1e-10)) : Math.log(Math.max(1 - prob, 1e-10));
+    }
+    return Math.round((ll / testY.length) * 10000) / 10000;
+  })();
+
+  // Matthews Correlation Coefficient (MCC) — macro-averaged for multi-class
+  const mccVal = (() => {
+    if (classes.length === 2) {
+      const tp = cm[0][0];
+      const tn = cm[1][1];
+      const fp = cm[1][0];
+      const fn = cm[0][1];
+      const denom = Math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn));
+      return denom > 0 ? Math.round(((tp * tn - fp * fn) / denom) * 10000) / 10000 : 0;
+    }
+    // Multi-class: compute from confusion matrix
+    let cov_xy = 0, cov_xz = 0, cov_yz = 0;
+    for (let k = 0; k < classes.length; k++) {
+      for (let l = 0; l < classes.length; l++) {
+        for (let m = 0; m < classes.length; m++) {
+          cov_xy += cm[k][k] * cm[l][m] - cm[k][l] * cm[m][k];
+        }
+      }
+    }
+    for (let k = 0; k < classes.length; k++) {
+      let rowSum = 0, colSum = 0;
+      for (let l = 0; l < classes.length; l++) { rowSum += cm[k][l]; colSum += cm[l][k]; }
+      cov_xz += rowSum * rowSum;
+      cov_yz += colSum * colSum;
+    }
+    const n = totalSamples;
+    cov_xz = n * n - cov_xz;
+    cov_yz = n * n - cov_yz;
+    const denom = Math.sqrt(cov_xz * cov_yz);
+    return denom > 0 ? Math.round((cov_xy / denom) * 10000) / 10000 : 0;
+  })();
+
+  const trainingDurationMs = Math.round(performance.now() - startTime);
 
   const result: TrainingResult = {
     modelId: `model_${Date.now()}`,
@@ -730,6 +794,11 @@ export function trainModel(
     precision,
     recall,
     f1Score: f1,
+    logLoss: logLossVal,
+    specificity,
+    mcc: mccVal,
+    trainAccuracy,
+    trainingDurationMs,
     confusionMatrix: cm,
     classLabels: classes,
     featureImportance: config.features.map((f, i) => ({

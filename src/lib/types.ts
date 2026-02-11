@@ -42,6 +42,11 @@ export interface TrainingResult {
   precision: number;
   recall: number;
   f1Score: number;
+  logLoss: number;
+  specificity: number;
+  mcc: number;
+  trainAccuracy: number;
+  trainingDurationMs: number;
   confusionMatrix: number[][];
   classLabels: string[];
   featureImportance: { feature: string; importance: number }[];

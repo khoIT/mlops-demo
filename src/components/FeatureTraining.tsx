@@ -20,6 +20,9 @@ import {
   TrendingDown,
   Grid3X3,
   Sparkles,
+  Trash2,
+  AlertTriangle,
+  Clock,
 } from "lucide-react";
 import InfoTooltip from "@/components/InfoTooltip";
 import {
@@ -41,6 +44,7 @@ interface FeatureTrainingProps {
   experiments: ExperimentRun[];
   onExperimentComplete: (run: ExperimentRun) => void;
   onModelReady: (result: TrainingResult) => void;
+  onDeleteExperiment: (experimentId: string) => void;
 }
 
 export default function FeatureTraining({
@@ -49,6 +53,7 @@ export default function FeatureTraining({
   experiments,
   onExperimentComplete,
   onModelReady,
+  onDeleteExperiment,
 }: FeatureTrainingProps) {
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>(
     DEFAULT_FEATURES.map((f) => f.id)
@@ -553,23 +558,37 @@ export default function FeatureTraining({
                     <th className="px-3 py-2 text-left text-zinc-500">Name</th>
                     <th className="px-3 py-2 text-left text-zinc-500">Model</th>
                     <th className="px-3 py-2 text-left text-zinc-500">Target</th>
-                    <th className="px-3 py-2 text-left text-zinc-500">Accuracy</th>
-                    <th className="px-3 py-2 text-left text-zinc-500">F1</th>
-                    <th className="px-3 py-2 text-left text-zinc-500">Status</th>
+                    <th className="px-3 py-2 text-right text-zinc-500">Accuracy</th>
+                    <th className="px-3 py-2 text-right text-zinc-500">F1</th>
+                    <th className="px-3 py-2 text-right text-zinc-500">MCC</th>
+                    <th className="px-3 py-2 text-right text-zinc-500">Log Loss</th>
+                    <th className="px-3 py-2 text-right text-zinc-500">Duration</th>
+                    <th className="px-3 py-2 text-center text-zinc-500">Status</th>
+                    <th className="px-3 py-2 text-center text-zinc-500"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
-                  {experiments.map((exp) => (
+                  {experiments.map((exp) => {
+                    const isOverfit = exp.result.trainAccuracy !== undefined &&
+                      (exp.result.trainAccuracy - exp.result.accuracy) > 0.1;
+                    return (
                     <tr
                       key={exp.id}
-                      className="hover:bg-zinc-800/30 cursor-pointer"
+                      className="hover:bg-zinc-800/30 cursor-pointer group"
                       onClick={() => {
                         setActiveResult(exp.result);
                         onModelReady(exp.result);
                       }}
                     >
                       <td className="px-3 py-2 text-zinc-200 font-medium">
-                        {exp.name}
+                        <div className="flex items-center gap-1.5">
+                          {exp.name}
+                          {isOverfit && (
+                            <span title="Possible overfitting detected">
+                              <AlertTriangle size={11} className="text-amber-400" />
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-zinc-400">
                         {exp.result.modelType.replace("_", " ")}
@@ -577,13 +596,29 @@ export default function FeatureTraining({
                       <td className="px-3 py-2 text-amber-400">
                         {exp.result.config.targetVariable}
                       </td>
-                      <td className="px-3 py-2 text-green-400 font-mono">
+                      <td className="px-3 py-2 text-right text-green-400 font-mono">
                         {(exp.result.accuracy * 100).toFixed(1)}%
                       </td>
-                      <td className="px-3 py-2 text-blue-400 font-mono">
+                      <td className="px-3 py-2 text-right text-blue-400 font-mono">
                         {(exp.result.f1Score * 100).toFixed(1)}%
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 text-right text-purple-400 font-mono">
+                        {exp.result.mcc !== undefined ? exp.result.mcc.toFixed(3) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right text-zinc-400 font-mono">
+                        {exp.result.logLoss !== undefined ? exp.result.logLoss.toFixed(3) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right text-zinc-500 font-mono">
+                        {exp.result.trainingDurationMs !== undefined ? (
+                          <span className="flex items-center gap-1 justify-end">
+                            <Clock size={10} />
+                            {exp.result.trainingDurationMs < 1000
+                              ? `${exp.result.trainingDurationMs}ms`
+                              : `${(exp.result.trainingDurationMs / 1000).toFixed(1)}s`}
+                          </span>
+                        ) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-center">
                         {exp.status === "completed" ? (
                           <CheckCircle2
                             size={14}
@@ -593,8 +628,21 @@ export default function FeatureTraining({
                           <XCircle size={14} className="text-red-500" />
                         )}
                       </td>
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteExperiment(exp.id);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-zinc-600 hover:text-red-400 transition-all"
+                          title="Delete experiment"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -648,6 +696,30 @@ export default function FeatureTraining({
                   color: "text-amber-400",
                   bg: "bg-amber-500/10 border-amber-500/20",
                 },
+                {
+                  label: "Specificity",
+                  value: activeResult.specificity !== undefined ? `${(activeResult.specificity * 100).toFixed(1)}%` : "—",
+                  color: "text-cyan-400",
+                  bg: "bg-cyan-500/10 border-cyan-500/20",
+                },
+                {
+                  label: "MCC",
+                  value: activeResult.mcc !== undefined ? activeResult.mcc.toFixed(3) : "—",
+                  color: "text-pink-400",
+                  bg: "bg-pink-500/10 border-pink-500/20",
+                },
+                {
+                  label: "Log Loss",
+                  value: activeResult.logLoss !== undefined ? activeResult.logLoss.toFixed(3) : "—",
+                  color: "text-red-400",
+                  bg: "bg-red-500/10 border-red-500/20",
+                },
+                {
+                  label: "Train Accuracy",
+                  value: activeResult.trainAccuracy !== undefined ? `${(activeResult.trainAccuracy * 100).toFixed(1)}%` : "—",
+                  color: activeResult.trainAccuracy !== undefined && (activeResult.trainAccuracy - activeResult.accuracy) > 0.1 ? "text-amber-400" : "text-zinc-400",
+                  bg: activeResult.trainAccuracy !== undefined && (activeResult.trainAccuracy - activeResult.accuracy) > 0.1 ? "bg-amber-500/10 border-amber-500/20" : "bg-zinc-800/50 border-zinc-700/30",
+                },
               ].map((m) => (
                 <div
                   key={m.label}
@@ -660,6 +732,16 @@ export default function FeatureTraining({
                 </div>
               ))}
             </div>
+            {/* Overfitting warning */}
+            {activeResult.trainAccuracy !== undefined && (activeResult.trainAccuracy - activeResult.accuracy) > 0.1 && (
+              <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg flex items-start gap-2">
+                <AlertTriangle size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                <div className="text-[11px] text-amber-400/90">
+                  <strong>Possible overfitting:</strong> Train accuracy ({(activeResult.trainAccuracy * 100).toFixed(1)}%) is significantly higher than test accuracy ({(activeResult.accuracy * 100).toFixed(1)}%).
+                  The model memorizes training data but fails to generalize. Try reducing model complexity, adding regularization, or using more training data.
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               {/* Training Loss Curve */}
