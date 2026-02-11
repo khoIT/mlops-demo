@@ -64,7 +64,7 @@ export interface PredictionResult {
   inputFeatures: PredictionInput;
 }
 
-export type PipelineStep = "data_explorer" | "feature_training" | "model_testing" | "persona_pipeline";
+export type PipelineStep = "data_explorer" | "eda" | "feature_training" | "model_testing" | "persona_pipeline";
 
 export interface ExperimentRun {
   id: string;

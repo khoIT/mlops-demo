@@ -1,7 +1,7 @@
 "use client";
 
 import { PipelineStep } from "@/lib/types";
-import { Database, FlaskConical, Play, Users } from "lucide-react";
+import { Database, Search, FlaskConical, Play, Users } from "lucide-react";
 
 const STEPS: { id: PipelineStep; label: string; icon: React.ReactNode; description: string }[] = [
   {
@@ -9,6 +9,12 @@ const STEPS: { id: PipelineStep; label: string; icon: React.ReactNode; descripti
     label: "Data Explorer",
     icon: <Database size={18} />,
     description: "Explore raw logs & Feature Store",
+  },
+  {
+    id: "eda",
+    label: "EDA",
+    icon: <Search size={18} />,
+    description: "Exploratory Data Analysis",
   },
   {
     id: "feature_training",

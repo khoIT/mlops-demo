@@ -15,6 +15,7 @@ import StepIndicator from "@/components/StepIndicator";
 import DataExplorer from "@/components/DataExplorer";
 import FeatureTraining from "@/components/FeatureTraining";
 import ModelTesting from "@/components/ModelTesting";
+import ExploratoryDataDiscovery from "@/components/ExploratoryDataDiscovery";
 import PersonaPipeline from "@/components/PersonaPipeline";
 import LearnPage from "@/components/LearnPage";
 import { InfoBanner } from "@/components/InfoTooltip";
@@ -178,6 +179,13 @@ export default function Home() {
             features={features}
             onFeaturesChange={setFeatures}
             onDataUpload={handleDataUpload}
+          />
+        )}
+
+        {currentStep === "eda" && (
+          <ExploratoryDataDiscovery
+            featureData={featureData}
+            features={features}
           />
         )}
 
