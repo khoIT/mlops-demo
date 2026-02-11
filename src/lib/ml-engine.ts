@@ -609,6 +609,61 @@ function getFeatureImportanceTree(
   return importance.map((v) => Math.round((v / sum) * 1000) / 1000);
 }
 
+// ─── Model Serialization ────────────────────────────────────────────────────
+
+// TreeNode.counts is a Map which doesn't JSON-serialize — convert to plain object
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function serializeTreeNode(node: TreeNode): any {
+  return {
+    featureIndex: node.featureIndex,
+    threshold: node.threshold,
+    left: node.left ? serializeTreeNode(node.left) : undefined,
+    right: node.right ? serializeTreeNode(node.right) : undefined,
+    prediction: node.prediction,
+    counts: node.counts ? Object.fromEntries(node.counts) : undefined,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function deserializeTreeNode(obj: any): TreeNode {
+  return {
+    featureIndex: obj.featureIndex,
+    threshold: obj.threshold,
+    left: obj.left ? deserializeTreeNode(obj.left) : undefined,
+    right: obj.right ? deserializeTreeNode(obj.right) : undefined,
+    prediction: obj.prediction,
+    counts: obj.counts ? new Map(Object.entries(obj.counts).map(([k, v]) => [k, Number(v)])) : undefined,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function serializeModel(model: TrainedModel): any {
+  if (model.type === "logistic_regression") {
+    return { ...model };
+  }
+  return {
+    ...model,
+    root: serializeTreeNode(model.root),
+  };
+}
+
+// Restore currentModel from a serialized model blob (e.g. from localStorage)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function restoreModel(serialized: any): void {
+  if (!serialized || !serialized.type) {
+    currentModel = null;
+    return;
+  }
+  if (serialized.type === "logistic_regression") {
+    currentModel = serialized as LogisticModel;
+  } else if (serialized.type === "decision_tree") {
+    currentModel = {
+      ...serialized,
+      root: deserializeTreeNode(serialized.root),
+    } as DecisionTreeModel;
+  }
+}
+
 // ─── Training Pipeline ───────────────────────────────────────────────────────
 
 type TrainedModel = LogisticModel | DecisionTreeModel;
@@ -812,6 +867,7 @@ export function trainModel(
     testUserIds,
     timestamp: new Date().toISOString(),
     config,
+    serializedModel: serializeModel(currentModel!),
   };
 
   return result;

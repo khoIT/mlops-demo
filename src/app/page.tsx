@@ -10,7 +10,7 @@ import {
   ExperimentRun,
   PipelineStep,
 } from "@/lib/types";
-import { parseRawLogs, computeUserFeatures, DEFAULT_FEATURES } from "@/lib/ml-engine";
+import { parseRawLogs, computeUserFeatures, DEFAULT_FEATURES, restoreModel } from "@/lib/ml-engine";
 import StepIndicator from "@/components/StepIndicator";
 import DataExplorer from "@/components/DataExplorer";
 import FeatureTraining from "@/components/FeatureTraining";
@@ -68,6 +68,14 @@ export default function Home() {
       console.warn("Failed to save active model to localStorage:", e);
     }
   }, [activeModel]);
+
+  // Restore in-memory model from serialized weights on mount
+  useEffect(() => {
+    if (activeModel?.serializedModel) {
+      restoreModel(activeModel.serializedModel);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // only on mount
 
   useEffect(() => {
     fetch("/raw-logs.csv")
@@ -254,6 +262,8 @@ export default function Home() {
           <ModelTesting
             featureData={featureData}
             trainingResult={activeModel}
+            experiments={experiments}
+            onModelChange={handleModelReady}
           />
         )}
 

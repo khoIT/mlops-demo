@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   UserFeatureRow,
   TrainingResult,
   PredictionResult,
+  ExperimentRun,
 } from "@/lib/types";
-import { predict, getFeatureStats } from "@/lib/ml-engine";
+import { predict, getFeatureStats, restoreModel } from "@/lib/ml-engine";
 import {
   Play,
   RotateCcw,
@@ -17,6 +18,8 @@ import {
   FileBarChart,
   ArrowRight,
   Shuffle,
+  ChevronDown,
+  CheckCircle2,
 } from "lucide-react";
 import InfoTooltip from "@/components/InfoTooltip";
 import {
@@ -33,20 +36,42 @@ import {
 interface ModelTestingProps {
   featureData: UserFeatureRow[];
   trainingResult: TrainingResult | null;
+  experiments?: ExperimentRun[];
+  onModelChange?: (result: TrainingResult) => void;
 }
 
 export default function ModelTesting({
   featureData,
   trainingResult,
+  experiments = [],
+  onModelChange,
 }: ModelTestingProps) {
+  const [showModelSelector, setShowModelSelector] = useState(false);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [predictionResult, setPredictionResult] =
     useState<PredictionResult | null>(null);
   const [predictionHistory, setPredictionHistory] = useState<
     PredictionResult[]
-  >([]);
+  >(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("mlops_prediction_history");
+        return saved ? JSON.parse(saved) : [];
+      } catch { return []; }
+    }
+    return [];
+  });
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [showSplitInfo, setShowSplitInfo] = useState(false);
+
+  // Persist prediction history to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("mlops_prediction_history", JSON.stringify(predictionHistory));
+    } catch (e) {
+      console.warn("Failed to save prediction history:", e);
+    }
+  }, [predictionHistory]);
 
   const featureNames = trainingResult?.config.features || [];
 
@@ -148,6 +173,59 @@ export default function ModelTesting({
               deployed
             </span>
           </div>
+
+          {/* Model Selector */}
+          {experiments.length > 1 && onModelChange && (
+            <div className="mb-3">
+              <button
+                onClick={() => setShowModelSelector(!showModelSelector)}
+                className="w-full flex items-center justify-between px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-300 hover:border-zinc-600 transition-colors"
+              >
+                <span className="truncate">
+                  {experiments.find((e) => e.result.modelId === trainingResult.modelId)?.name || trainingResult.modelId}
+                </span>
+                <ChevronDown size={12} className={`shrink-0 ml-2 text-zinc-500 transition-transform ${showModelSelector ? "rotate-180" : ""}`} />
+              </button>
+              {showModelSelector && (
+                <div className="mt-1 bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                  {experiments.filter((e) => e.status === "completed").map((exp) => {
+                    const isActive = exp.result.modelId === trainingResult.modelId;
+                    return (
+                      <button
+                        key={exp.id}
+                        onClick={() => {
+                          if (!isActive) {
+                            if (exp.result.serializedModel) {
+                              restoreModel(exp.result.serializedModel);
+                            }
+                            onModelChange(exp.result);
+                            setPredictionResult(null);
+                            setInputValues({});
+                            setSelectedUserId("");
+                          }
+                          setShowModelSelector(false);
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs transition-colors ${
+                          isActive ? "bg-green-500/10 text-green-400" : "text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200"
+                        }`}
+                      >
+                        {isActive && <CheckCircle2 size={11} className="shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="truncate font-medium">{exp.name}</div>
+                          <div className="text-[10px] text-zinc-600 flex gap-2 mt-0.5">
+                            <span>{exp.result.modelType.replace("_", " ")}</span>
+                            <span className="text-amber-400/60">{exp.result.config.targetVariable}</span>
+                            <span className="text-green-400/60">{(exp.result.accuracy * 100).toFixed(1)}%</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2 text-xs">
             <div className="flex justify-between">
               <span className="text-zinc-500">Model ID</span>
@@ -463,6 +541,7 @@ export default function ModelTesting({
             <h3 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
               <FileBarChart size={14} className="text-blue-400" />
               Prediction History
+              <span className="text-[10px] text-zinc-600 font-normal ml-1">({predictionHistory.length})</span>
               <InfoTooltip
                 title="Prediction History — Spot Patterns"
                 variant="info"
@@ -519,6 +598,12 @@ export default function ModelTesting({
                 </tbody>
               </table>
             </div>
+            <button
+              onClick={() => setPredictionHistory([])}
+              className="mt-2 text-[10px] text-zinc-600 hover:text-red-400 transition-colors"
+            >
+              Clear history
+            </button>
           </div>
         )}
       </div>

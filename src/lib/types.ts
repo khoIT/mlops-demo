@@ -57,6 +57,8 @@ export interface TrainingResult {
   testUserIds: string[];
   timestamp: string;
   config: TrainingConfig;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  serializedModel?: any;
 }
 
 export interface PredictionInput {
