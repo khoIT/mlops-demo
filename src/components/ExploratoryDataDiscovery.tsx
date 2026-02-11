@@ -534,10 +534,10 @@ export default function ExploratoryDataDiscovery({
                                       <YAxis tick={{ fill: "#71717a", fontSize: 9 }} axisLine={{ stroke: "#3f3f46" }} />
                                       <Tooltip
                                         contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: "11px" }}
-                                        formatter={(value: number) => [value, "Count"]}
-                                        labelFormatter={(label: string) => {
-                                          const bin = histograms[feature.id]?.find((b) => b.binLabel === label);
-                                          return bin ? `Range: ${bin.range}` : label;
+                                        formatter={(value: any) => [value, "Count"]}
+                                        labelFormatter={(label: any) => {
+                                          const bin = histograms[feature.id]?.find((b: any) => b.binLabel === label);
+                                          return bin ? `Range: ${bin.range}` : String(label);
                                         }}
                                       />
                                       <Bar dataKey="count" fill="#06b6d4" radius={[2, 2, 0, 0]} />
@@ -790,7 +790,7 @@ export default function ExploratoryDataDiscovery({
                       <YAxis tick={{ fill: "#71717a", fontSize: 8 }} axisLine={{ stroke: "#3f3f46" }} />
                       <Tooltip
                         contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: "11px" }}
-                        formatter={(value: number) => [value, "Count"]}
+                        formatter={(value: any) => [value, "Count"]}
                       />
                       <Bar dataKey="count" fill="#06b6d4" radius={[2, 2, 0, 0]} />
                     </BarChart>
@@ -925,7 +925,7 @@ export default function ExploratoryDataDiscovery({
                   />
                   <Tooltip
                     contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: "11px" }}
-                    formatter={(value: number, name: string) => [typeof value === "number" ? value.toFixed(3) : value, name]}
+                    formatter={(value: any, name: any) => [typeof value === "number" ? value.toFixed(3) : value, name]}
                     labelFormatter={() => ""}
                   />
                   {scatterColorCategories.map((cat, idx) => (
@@ -1000,7 +1000,7 @@ export default function ExploratoryDataDiscovery({
                   <YAxis tick={{ fill: "#71717a", fontSize: 10 }} axisLine={{ stroke: "#3f3f46" }} />
                   <Tooltip
                     contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: "11px" }}
-                    formatter={(value: number, _: string, props: { payload: { percentage: number } }) => [
+                    formatter={(value: any, _: any, props: any) => [
                       `${value} (${props.payload.percentage}%)`,
                       "Count",
                     ]}
