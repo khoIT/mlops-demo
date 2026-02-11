@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   UserFeatureRow,
   FeatureDefinition,
@@ -65,6 +65,52 @@ export default function FeatureTraining({
   const [activeResult, setActiveResult] = useState<TrainingResult | null>(null);
   const [experimentName, setExperimentName] = useState("Experiment 1");
 
+  // Label mode: auto (percentile-based) vs manual (user-defined)
+  const [labelMode, setLabelMode] = useState<"auto" | "manual">("auto");
+  const [manualLabels, setManualLabels] = useState<Record<string, Record<string, string>>>({});
+
+  // Get the distinct label values for a target variable from auto-labeled data
+  const labelOptions = useMemo(() => {
+    const vals = new Set<string>();
+    for (const row of featureData) {
+      vals.add(String(row[targetVariable]));
+    }
+    return [...vals].sort();
+  }, [featureData, targetVariable]);
+
+  const setManualLabel = useCallback((userId: string, target: string, value: string) => {
+    setManualLabels((prev) => ({
+      ...prev,
+      [target]: { ...prev[target], [userId]: value },
+    }));
+  }, []);
+
+  // Apply manual overrides to feature data for training
+  const effectiveFeatureData = useMemo(() => {
+    if (labelMode === "auto") return featureData;
+    const overrides = manualLabels[targetVariable] || {};
+    return featureData.map((row) => {
+      const userId = String(row.user_id);
+      if (overrides[userId] !== undefined) {
+        return { ...row, [targetVariable]: overrides[userId] };
+      }
+      return row;
+    });
+  }, [featureData, labelMode, manualLabels, targetVariable]);
+
+  // Count how many manual overrides differ from auto
+  const manualOverrideCount = useMemo(() => {
+    const overrides = manualLabels[targetVariable] || {};
+    let count = 0;
+    for (const row of featureData) {
+      const userId = String(row.user_id);
+      if (overrides[userId] !== undefined && overrides[userId] !== String(row[targetVariable])) {
+        count++;
+      }
+    }
+    return count;
+  }, [featureData, manualLabels, targetVariable]);
+
   const toggleFeature = (id: string) => {
     setSelectedFeatures((prev) =>
       prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
@@ -90,7 +136,7 @@ export default function FeatureTraining({
         maxDepth,
       };
 
-      const result = trainModel(featureData, config);
+      const result = trainModel(effectiveFeatureData, config);
       setActiveResult(result);
       onModelReady(result);
 
@@ -208,6 +254,92 @@ export default function FeatureTraining({
               </label>
             ))}
           </div>
+
+          {/* Label Mode Toggle */}
+          <div className="mt-3 pt-3 border-t border-zinc-800">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] text-zinc-500 font-medium">Label Source:</span>
+              <div className="flex rounded-lg overflow-hidden border border-zinc-700">
+                <button
+                  onClick={() => setLabelMode("auto")}
+                  className={`px-3 py-1 text-[11px] font-medium transition-colors ${labelMode === "auto" ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}
+                >
+                  Auto (Percentile)
+                </button>
+                <button
+                  onClick={() => setLabelMode("manual")}
+                  className={`px-3 py-1 text-[11px] font-medium transition-colors ${labelMode === "manual" ? "bg-amber-600 text-white" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"}`}
+                >
+                  Manual Labels
+                </button>
+              </div>
+            </div>
+            <p className="text-[10px] text-zinc-600">
+              {labelMode === "auto"
+                ? "Labels computed from data using percentile thresholds. Fast, but assumes your heuristic is correct."
+                : `You define each user's label. ${manualOverrideCount > 0 ? `${manualOverrideCount} override${manualOverrideCount > 1 ? "s" : ""} from auto.` : "Click labels below to change them."}`}
+            </p>
+          </div>
+
+          {/* Manual Label Editor */}
+          {labelMode === "manual" && (
+            <div className="mt-3 pt-3 border-t border-zinc-800">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] text-zinc-400 font-medium">Edit Labels — {targetVariable.replace(/_/g, " ")}</span>
+                <button
+                  onClick={() => setManualLabels((prev) => ({ ...prev, [targetVariable]: {} }))}
+                  className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+                >
+                  Reset to auto
+                </button>
+              </div>
+              <div className="max-h-[200px] overflow-y-auto rounded-lg border border-zinc-800">
+                <table className="w-full text-[11px]">
+                  <thead className="sticky top-0 bg-zinc-900 z-10">
+                    <tr className="border-b border-zinc-800">
+                      <th className="px-2 py-1.5 text-left text-zinc-500 font-medium">user_id</th>
+                      <th className="px-2 py-1.5 text-left text-zinc-500 font-medium">auto</th>
+                      <th className="px-2 py-1.5 text-left text-zinc-500 font-medium">label</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/50">
+                    {featureData.map((row) => {
+                      const userId = String(row.user_id);
+                      const autoLabel = String(row[targetVariable]);
+                      const overrides = manualLabels[targetVariable] || {};
+                      const currentLabel = overrides[userId] ?? autoLabel;
+                      const isOverridden = overrides[userId] !== undefined && overrides[userId] !== autoLabel;
+                      return (
+                        <tr key={userId} className={isOverridden ? "bg-amber-500/5" : ""}>
+                          <td className="px-2 py-1 text-cyan-400 font-mono">{userId}</td>
+                          <td className="px-2 py-1 text-zinc-600 font-mono">{autoLabel}</td>
+                          <td className="px-2 py-1">
+                            <div className="flex gap-1">
+                              {labelOptions.map((opt) => (
+                                <button
+                                  key={opt}
+                                  onClick={() => setManualLabel(userId, targetVariable, opt)}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-all ${
+                                    currentLabel === opt
+                                      ? opt === "yes" || opt === autoLabel
+                                        ? "bg-blue-500/20 border-blue-500/40 text-blue-300"
+                                        : "bg-amber-500/20 border-amber-500/40 text-amber-300"
+                                      : "border-zinc-700 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+                                  }`}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Feature Selection */}
