@@ -36,6 +36,7 @@ import {
   Eye,
   Cpu,
   Monitor,
+  ChevronDown,
 } from "lucide-react";
 
 type Section =
@@ -45,6 +46,7 @@ type Section =
   | "feature_engineering"
   | "evaluation"
   | "production"
+  | "data_drift"
   | "compute"
   | "glossary";
 
@@ -55,6 +57,7 @@ const SECTIONS: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: "feature_engineering", label: "Feature Engineering IRL", icon: <Wrench size={16} /> },
   { id: "evaluation", label: "Evaluation & Testing", icon: <Target size={16} /> },
   { id: "production", label: "Production & Monitoring", icon: <Rocket size={16} /> },
+  { id: "data_drift", label: "Data Drift Deep Dive", icon: <AlertTriangle size={16} /> },
   { id: "compute", label: "Compute & Infrastructure", icon: <Cpu size={16} /> },
   { id: "glossary", label: "Glossary", icon: <BookOpen size={16} /> },
 ];
@@ -107,6 +110,7 @@ function KeyValue({ label, children }: { label: string; children: React.ReactNod
 
 export default function LearnPage({ onBack }: LearnPageProps) {
   const [activeSection, setActiveSection] = useState<Section>("overview");
+  const [expandedDrift, setExpandedDrift] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
@@ -1168,6 +1172,413 @@ export default function LearnPage({ onBack }: LearnPageProps) {
             </>
           )}
 
+          {/* ═══════════════════ DATA DRIFT DEEP DIVE ═══════════════════ */}
+          {activeSection === "data_drift" && (
+            <>
+              {/* Card 1: Training Assumptions */}
+              <SectionCard title="Your Model's Hidden Assumptions" color="red">
+                <p>
+                  Every trained model <strong className="text-zinc-200">implicitly assumes</strong> that the world
+                  at inference time looks like the world at training time. Drift happens when that assumption breaks.
+                </p>
+                <div className="grid grid-cols-5 gap-2 mt-3">
+                  {[
+                    { icon: <Activity size={13} />, label: "User behavior is stable over time" },
+                    { icon: <Database size={13} />, label: "Event logging is consistent" },
+                    { icon: <Layers size={13} />, label: "Product structure is fixed" },
+                    { icon: <Monitor size={13} />, label: "Device mix doesn't shift" },
+                    { icon: <Compass size={13} />, label: "Ratios reflect true intent" },
+                  ].map((a) => (
+                    <div key={a.label} className="bg-zinc-800/50 rounded-lg p-2.5 border border-red-500/10 text-center">
+                      <div className="text-red-400 flex justify-center mb-1">{a.icon}</div>
+                      <div className="text-[10px] text-zinc-500 leading-tight">{a.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+
+              {/* Card 2: Visual Drift Flow Diagram */}
+              <SectionCard title="How Live Data Drifts" color="amber">
+                <div className="flex items-center gap-2 justify-center py-3">
+                  {/* Training */}
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 text-center min-w-[130px]">
+                    <Database size={16} className="text-green-400 mx-auto mb-1" />
+                    <div className="text-xs font-semibold text-green-300">Training Data</div>
+                    <div className="text-[10px] text-zinc-500">Historical, stable</div>
+                  </div>
+                  <ChevronRight size={16} className="text-zinc-600 shrink-0" />
+                  {/* Model */}
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-4 py-3 text-center min-w-[130px]">
+                    <Brain size={16} className="text-blue-400 mx-auto mb-1" />
+                    <div className="text-xs font-semibold text-blue-300">Trained Model</div>
+                    <div className="text-[10px] text-zinc-500">Frozen weights</div>
+                  </div>
+                  <ChevronRight size={16} className="text-zinc-600 shrink-0" />
+                  {/* Production */}
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 text-center min-w-[130px]">
+                    <Rocket size={16} className="text-amber-400 mx-auto mb-1" />
+                    <div className="text-xs font-semibold text-amber-300">Production</div>
+                    <div className="text-[10px] text-zinc-500">Live user data</div>
+                  </div>
+                </div>
+                {/* Arrow down to drift */}
+                <div className="flex justify-center">
+                  <div className="w-px h-6 bg-zinc-700" />
+                </div>
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-center max-w-md mx-auto">
+                  <AlertTriangle size={16} className="text-red-400 mx-auto mb-1" />
+                  <div className="text-xs font-semibold text-red-300 mb-2">Features no longer match training distribution</div>
+                  <div className="flex justify-center gap-3">
+                    <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">User behavior</span>
+                    <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">Product change</span>
+                    <span className="text-[10px] bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">Logging issue</span>
+                  </div>
+                </div>
+                <div className="bg-zinc-800/50 rounded-lg p-3 mt-3 border border-zinc-700">
+                  <div className="flex items-start gap-2">
+                    <Lightbulb size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                    <p className="text-xs text-zinc-400">
+                      <strong className="text-zinc-200">Most &quot;data drift&quot; is not ML drift — it&apos;s product evolution.</strong> Drift
+                      detection is not &quot;auto retrain&quot;. It&apos;s a feedback loop between ML, product, and data engineering.
+                    </p>
+                  </div>
+                </div>
+              </SectionCard>
+
+              {/* Card 3: Feature Drift Guide (interactive, expandable) */}
+              <SectionCard title="Feature-by-Feature Drift Guide (click to expand)" color="blue">
+                <p className="mb-3">Every feature in this demo has specific drift risks. Click any feature to see details.</p>
+                <div className="space-y-1.5">
+                  {([
+                    { id: "session_count", name: "Session Count", tier: 1, severity: "yellow" as const, metric: "p99 ↑ 2.5×", causeType: "logging" as const, causeLabel: "Logging duplication", action: "Investigate", risks: ["Logging bug (duplicate events, retries, auto-refresh)", "Tracking blocked by browser / adblock / CSP change", "New SDK version or frontend event missing"], looksLike: "Mean ↑ suddenly, p95/p99 explodes, distribution becomes heavy-tailed", insight: "This drift is often a data bug, not user behavior.", checks: ["Mean change > ±30%", "p99 change > 2×", "Zero-rate > 10%"] },
+                    { id: "unique_resource_types", name: "Unique Resource Types", tier: 2, severity: "yellow" as const, metric: "Mean ↑ 1+", causeType: "product" as const, causeLabel: "Product expansion", action: "Monitor", risks: ["New resource types added (ai, insight, alert)", "Old types deprecated or merged", "Mislabeling (frontend sends wrong resource_type)"], looksLike: "Mean ↑ (more types per user), new category appears, entropy jumps", insight: "Model learned 'many types = power user' but now everyone touches many types because UI changed.", checks: ["Mean ↑ > 1", "New category appears", "Retrain only if persists >14 days"] },
+                    { id: "unique_resources", name: "Unique Resources", tier: 2, severity: "yellow" as const, metric: "Mean ↑ 40%", causeType: "product" as const, causeLabel: "Taxonomy churn", action: "Investigate", risks: ["Dashboard renaming or splitting/cloning", "Folder re-org (same dashboard, new name)", "Cross-game dashboards introduced"], looksLike: "Mean ↑ without session_count ↑, ratio unique_resources/session_count spikes", insight: "Looks like exploration behavior, but it's actually product taxonomy churn.", checks: ["Mean ↑ > 40%", "Ratio to session_count ↑", "Avoid retrain unless behavior confirmed"] },
+                    { id: "mobile_ratio", name: "Mobile Ratio", tier: 1, severity: "yellow" as const, metric: "Mean ↑ 0.25", causeType: "user" as const, causeLabel: "Mobile adoption", action: "Accept", risks: ["Mobile app launch / redesign", "Mobile traffic campaign", "Tablet classified as mobile", "Device detection logic change"], looksLike: "Mean jumps (e.g. 0.3 → 0.7), distribution becomes bimodal", insight: "Your persona model may implicitly encode 'mobile-heavy = casual'. If everyone goes mobile → persona predictions collapse.", checks: ["Mean shift > 0.2", "Distribution becomes bimodal", "Retrain if correlated with persona shift"] },
+                    { id: "realtime_ratio", name: "Realtime Ratio", tier: 1, severity: "red" as const, metric: "PSI = 0.31", causeType: "product" as const, causeLabel: "Navigation change", action: "Retrain", risks: ["Realtime dashboard promoted on homepage", "Realtime becomes default landing page", "Realtime renamed / reclassified"], looksLike: "Mean ↑ sharply, correlation with home_visit_ratio changes", insight: "This is product-driven drift, not user-driven. Model learned behavior under old navigation.", checks: ["PSI > 0.25", "Mean ↑ > 50%", "Version feature after retrain"] },
+                    { id: "tableau_count", name: "Tableau Count", tier: 2, severity: "yellow" as const, metric: "Zero-rate ↑ 30%", causeType: "product" as const, causeLabel: "Tool migration", action: "Deprecate?", risks: ["Migration away from Tableau", "Tableau dashboards embedded elsewhere", "Resource_type mis-tagged"], looksLike: "Long-term downward trend, zero-inflation (many users suddenly have 0)", insight: "Model thinks 'low tableau = low engagement' but product reality changed.", checks: ["Zero-rate ↑ > 30%", "Long-term downward trend", "Replace with tool-agnostic feature"] },
+                    { id: "export_count", name: "Export Count", tier: 2, severity: "red" as const, metric: "Mean → ~0", causeType: "product" as const, causeLabel: "Permission/UI change", action: "Disable feature", risks: ["Export button moved", "Permission change (exports disabled)", "New export formats added"], looksLike: "Sharp drop to near-zero, or spike after bulk-export feature launch", insight: "Very sensitive feature — should have tight thresholds.", checks: ["Mean drops to ~0 → disable feature", "Spike after launch → monitor", "Tight thresholds required"] },
+                    { id: "search_count", name: "Search Count", tier: 2, severity: "yellow" as const, metric: "Ratio ↑ to sessions", causeType: "product" as const, causeLabel: "UX discoverability", action: "Accept", risks: ["Search bar made more visible", "Default focus on search", "Search auto-suggestions generating events"], looksLike: "Mean ↑ without session_count ↑, ratio search_count/session_count spikes", insight: "Model might treat search-heavy users as 'lost/struggling' → suddenly everyone looks lost.", checks: ["Ratio to session_count ↑", "Mean ↑ > 2×", "Accept unless correlated with churn"] },
+                    { id: "unique_games", name: "Unique Games", tier: 3, severity: "red" as const, metric: "Missing rate ↑", causeType: "logging" as const, causeLabel: "Schema drift", action: "Fix schema", risks: ["Folder naming changes", "New games added", "Cross-game dashboards introduced", "Folder missing in metadata"], looksLike: "Missing rate ↑, mean ↑ because shared dashboards touch multiple games", insight: "Classic schema drift hidden as data drift. Do NOT retrain — fix the schema.", checks: ["Missing rate > 15%", "Mean ↑ unexpectedly", "Fix schema, do not retrain"] },
+                    { id: "home_visit_ratio", name: "Home Visit Ratio", tier: 1, severity: "red" as const, metric: "Mean ↓ 80%", causeType: "product" as const, causeLabel: "Homepage bypass", action: "Retrain", risks: ["Home page removed", "Deep linking introduced", "Homepage auto-redirect"], looksLike: "Mean collapses to near zero, distribution mass at 0", insight: "Ratios are extremely fragile to navigation changes. Consider retiring this feature.", checks: ["Mean ↓ > 70%", "Mass at 0", "Retrain, possibly retire feature"] },
+                    { id: "avg_hour", name: "Avg Hour", tier: 3, severity: "red" as const, metric: "Mean ± 7hrs", causeType: "logging" as const, causeLabel: "Timezone bug", action: "Investigate!", risks: ["Timezone handling bug", "Backend timezone change", "International users onboarded"], looksLike: "Mean shifts by ±7 hours, multimodal distribution", insight: "This drift can destroy the model silently — values are 'valid' but semantically wrong.", checks: ["Mean shift > 3 hours", "New peaks at odd hours", "Block inference if timezone bug"] },
+                    { id: "activity_span_hours", name: "Activity Span", tier: 3, severity: "yellow" as const, metric: "Median ↑ 3×", causeType: "logging" as const, causeLabel: "Sessionization change", action: "Investigate", risks: ["Sessionization logic change", "Background pings extend sessions", "Sparse events due to logging gaps"], looksLike: "Median ↑ massively, long tail explodes", insight: "Model thinks 'long span = high engagement' but it's actually background noise.", checks: ["Median ↑ > 3×", "Tail explosion", "Recompute logic if needed"] },
+                  ] as const).map((feat) => (
+                    <div key={feat.id} className="border border-zinc-800 rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => setExpandedDrift(expandedDrift === feat.id ? null : feat.id)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-800/50 transition-colors text-left"
+                      >
+                        {/* Severity dot */}
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${feat.severity === "red" ? "bg-red-400" : feat.severity === "yellow" ? "bg-amber-400" : "bg-green-400"}`} />
+                        {/* Feature name */}
+                        <span className="text-xs font-semibold text-zinc-200 w-40 shrink-0">{feat.name}</span>
+                        {/* Tier badge */}
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 ${feat.tier === 1 ? "bg-blue-500/20 text-blue-300" : feat.tier === 2 ? "bg-zinc-700 text-zinc-400" : "bg-amber-500/20 text-amber-300"}`}>
+                          Tier {feat.tier}
+                        </span>
+                        {/* Cause badge */}
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 ${feat.causeType === "user" ? "bg-blue-500/15 text-blue-300" : feat.causeType === "product" ? "bg-purple-500/15 text-purple-300" : "bg-orange-500/15 text-orange-300"}`}>
+                          {feat.causeType === "user" ? "User behavior" : feat.causeType === "product" ? "Product change" : "Logging issue"}
+                        </span>
+                        {/* Metric */}
+                        <span className="text-[10px] text-zinc-500 flex-1">{feat.metric}</span>
+                        {/* Action */}
+                        <span className={`text-[10px] font-medium shrink-0 ${feat.severity === "red" ? "text-red-400" : "text-amber-400"}`}>{feat.action}</span>
+                        {/* Chevron */}
+                        <ChevronDown size={12} className={`text-zinc-600 shrink-0 transition-transform ${expandedDrift === feat.id ? "rotate-180" : ""}`} />
+                      </button>
+                      {expandedDrift === feat.id && (
+                        <div className="px-4 pb-3 border-t border-zinc-800/50 bg-zinc-800/20">
+                          <div className="grid grid-cols-3 gap-3 pt-3">
+                            <div>
+                              <div className="text-[10px] font-semibold text-zinc-500 uppercase mb-1">Drift Risks</div>
+                              <ul className="text-[11px] text-zinc-400 space-y-0.5">
+                                {feat.risks.map((r) => <li key={r}>- {r}</li>)}
+                              </ul>
+                            </div>
+                            <div>
+                              <div className="text-[10px] font-semibold text-zinc-500 uppercase mb-1">What Drift Looks Like</div>
+                              <p className="text-[11px] text-zinc-400">{feat.looksLike}</p>
+                              <div className="text-[10px] font-semibold text-zinc-500 uppercase mb-1 mt-2">Checks / Thresholds</div>
+                              <ul className="text-[11px] text-zinc-400 space-y-0.5">
+                                {feat.checks.map((c) => <li key={c}>- {c}</li>)}
+                              </ul>
+                            </div>
+                            <div>
+                              <div className="text-[10px] font-semibold text-zinc-500 uppercase mb-1">Key Insight</div>
+                              <div className="bg-zinc-800/50 rounded p-2 border border-zinc-700">
+                                <p className="text-[11px] text-amber-300/90">{feat.insight}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+
+              {/* Card 4: Cross-Feature Drift */}
+              <SectionCard title="Cross-Feature Drift — The Sneaky Ones" color="purple">
+                <p className="mb-3">Single-feature monitoring misses these. They&apos;re the most dangerous and hardest to spot.</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-purple-500/10">
+                    <div className="text-xs font-semibold text-purple-300 mb-2 flex items-center gap-1.5">
+                      <TrendingDown size={12} /> Ratio Denominator Drift
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mb-2">
+                      <code className="text-zinc-300">mobile_ratio</code>, <code className="text-zinc-300">realtime_ratio</code>, and
+                      <code className="text-zinc-300"> home_visit_ratio</code> all depend on <code className="text-zinc-300">session_count</code>.
+                    </p>
+                    <p className="text-[11px] text-amber-400">If session_count drifts, ALL ratios drift — even if behavior doesn&apos;t change.</p>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-purple-500/10">
+                    <div className="text-xs font-semibold text-purple-300 mb-2 flex items-center gap-1.5">
+                      <GitBranch size={12} /> Correlation Drift
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mb-2">
+                      Previously: <code className="text-zinc-300">realtime_ratio ↑ → export_count ↑</code><br />
+                      Now: realtime dashboards don&apos;t support export.
+                    </p>
+                    <p className="text-[11px] text-amber-400">Model assumptions break without any single feature alarming.</p>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-purple-500/10">
+                    <div className="text-xs font-semibold text-purple-300 mb-2 flex items-center gap-1.5">
+                      <Users size={12} /> Cold-Start Inflation
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mb-2">
+                      New users: low <code className="text-zinc-300">session_count</code>, low <code className="text-zinc-300">unique_resources</code>, unstable ratios (0/1 extremes).
+                    </p>
+                    <p className="text-[11px] text-amber-400">If onboarding flow changes → cold-start share increases → global drift.</p>
+                  </div>
+                </div>
+              </SectionCard>
+
+              {/* Card 5: Drift Risk Ranking */}
+              <SectionCard title="Most Likely Drift Sources (Ranked)" color="amber">
+                <div className="space-y-2">
+                  {[
+                    { rank: 1, label: "Navigation / UI change drift", features: "home_visit_ratio, realtime_ratio, tableau_count", severity: "red" },
+                    { rank: 2, label: "Logging / duplication drift", features: "session_count, activity_span_hours", severity: "red" },
+                    { rank: 3, label: "Taxonomy drift", features: "resource_type, resource_name, folder", severity: "yellow" },
+                    { rank: 4, label: "Device mix drift", features: "mobile_ratio", severity: "yellow" },
+                    { rank: 5, label: "Timezone / ingestion drift", features: "avg_hour", severity: "yellow" },
+                  ].map((r) => (
+                    <div key={r.rank} className="flex items-center gap-3 bg-zinc-800/30 rounded-lg px-3 py-2">
+                      <span className={`text-sm font-bold w-6 text-center ${r.severity === "red" ? "text-red-400" : "text-amber-400"}`}>#{r.rank}</span>
+                      <span className="text-xs font-semibold text-zinc-200 w-56">{r.label}</span>
+                      <span className="text-[10px] text-zinc-500">{r.features}</span>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+
+              {/* Card 6: Drift Dashboard Design (mockup) */}
+              <SectionCard title="Drift Dashboard Design (What Monitoring Looks Like)" color="cyan">
+                {/* Summary header */}
+                <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 mb-3">
+                  <div className="text-xs font-semibold text-cyan-300 mb-2">Feature Drift Overview (Last 7 days)</div>
+                  <div className="grid grid-cols-4 gap-3">
+                    {[
+                      { label: "Features monitored", value: "12", color: "text-zinc-200" },
+                      { label: "With drift", value: "5", color: "text-amber-400" },
+                      { label: "Critical drift", value: "2", color: "text-red-400" },
+                      { label: "Data issues", value: "1", color: "text-orange-400" },
+                    ].map((m) => (
+                      <div key={m.label} className="text-center">
+                        <div className={`text-lg font-bold ${m.color}`}>{m.value}</div>
+                        <div className="text-[10px] text-zinc-500">{m.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Breakdown table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-zinc-800">
+                        <th className="text-left py-2 pr-2 text-zinc-400 font-semibold">Feature</th>
+                        <th className="text-left py-2 pr-2 text-zinc-400 font-semibold">Status</th>
+                        <th className="text-left py-2 pr-2 text-zinc-400 font-semibold">Metric</th>
+                        <th className="text-left py-2 pr-2 text-zinc-400 font-semibold">Likely Cause</th>
+                        <th className="text-left py-2 text-zinc-400 font-semibold">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/50">
+                      {[
+                        { feat: "realtime_ratio", status: "red", statusLabel: "Severe", metric: "PSI = 0.31", cause: "Product nav change", action: "Retrain" },
+                        { feat: "home_visit_ratio", status: "red", statusLabel: "Severe", metric: "Mean ↓ 80%", cause: "Homepage bypass", action: "Retrain" },
+                        { feat: "session_count", status: "yellow", statusLabel: "Moderate", metric: "p99 ↑ 2.5×", cause: "Logging duplication", action: "Investigate" },
+                        { feat: "mobile_ratio", status: "yellow", statusLabel: "Moderate", metric: "Mean ↑ 0.25", cause: "Mobile adoption", action: "Accept" },
+                        { feat: "export_count", status: "yellow", statusLabel: "Moderate", metric: "Mean ↓ 60%", cause: "UI change", action: "Monitor" },
+                        { feat: "avg_hour", status: "green", statusLabel: "Stable", metric: "—", cause: "—", action: "—" },
+                        { feat: "search_count", status: "green", statusLabel: "Stable", metric: "—", cause: "—", action: "—" },
+                      ].map((r) => (
+                        <tr key={r.feat}>
+                          <td className="py-2 pr-2 text-zinc-300 font-medium">{r.feat}</td>
+                          <td className="py-2 pr-2">
+                            <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full ${r.status === "red" ? "bg-red-500/20 text-red-300" : r.status === "yellow" ? "bg-amber-500/20 text-amber-300" : "bg-green-500/20 text-green-300"}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${r.status === "red" ? "bg-red-400" : r.status === "yellow" ? "bg-amber-400" : "bg-green-400"}`} />
+                              {r.statusLabel}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-2 text-zinc-500">{r.metric}</td>
+                          <td className="py-2 pr-2 text-zinc-500">{r.cause}</td>
+                          <td className={`py-2 font-medium ${r.status === "red" ? "text-red-400" : r.status === "yellow" ? "text-amber-400" : "text-zinc-600"}`}>{r.action}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Feature detail example */}
+                <div className="mt-3 bg-zinc-800/30 rounded-lg p-3 border border-cyan-500/10">
+                  <div className="text-[10px] text-zinc-500 uppercase font-semibold mb-2">Feature Detail Example: realtime_ratio</div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <div className="text-[10px] text-zinc-500 mb-1">Description</div>
+                      <div className="text-[11px] text-zinc-400">Ratio feature, depends on session_count and resource_type</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-zinc-500 mb-1">Stats</div>
+                      <div className="grid grid-cols-3 gap-1 text-[10px]">
+                        <span className="text-zinc-500">Metric</span><span className="text-zinc-500">Ref</span><span className="text-zinc-500">Current</span>
+                        <span className="text-zinc-400">Mean</span><span className="text-zinc-300">0.28</span><span className="text-red-300">0.61</span>
+                        <span className="text-zinc-400">p90</span><span className="text-zinc-300">0.52</span><span className="text-red-300">0.89</span>
+                        <span className="text-zinc-400">PSI</span><span className="text-zinc-300">—</span><span className="text-red-300">0.31</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-zinc-500 mb-1">Annotation</div>
+                      <div className="text-[11px] text-zinc-400 italic">&quot;Realtime dashboard promoted to homepage on Feb 9&quot;</div>
+                      <div className="text-[11px] text-green-400 mt-1 font-medium">Retrain with post-change data</div>
+                    </div>
+                  </div>
+                </div>
+                {/* Cross-feature drift panel */}
+                <div className="mt-3 bg-zinc-800/30 rounded-lg p-3 border border-cyan-500/10">
+                  <div className="text-[10px] text-zinc-500 uppercase font-semibold mb-2">Correlated Drift Signals</div>
+                  <div className="grid grid-cols-3 gap-2 text-[11px]">
+                    <div className="bg-zinc-800/50 rounded p-2 border border-zinc-700">
+                      <span className="text-zinc-400">realtime_ratio</span> <span className="text-red-400">↔</span> <span className="text-zinc-400">home_visit_ratio</span>
+                      <div className="text-[10px] text-amber-400 mt-0.5">Inverted</div>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded p-2 border border-zinc-700">
+                      <span className="text-zinc-400">session_count</span> <span className="text-red-400">↔</span> <span className="text-zinc-400">activity_span</span>
+                      <div className="text-[10px] text-amber-400 mt-0.5">Both ↑</div>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded p-2 border border-zinc-700">
+                      <span className="text-zinc-400">mobile_ratio</span> <span className="text-red-400">↔</span> <span className="text-zinc-400">avg_hour</span>
+                      <div className="text-[10px] text-amber-400 mt-0.5">New bimodality</div>
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
+
+              {/* Card 7: Per-Feature Drift Thresholds */}
+              <SectionCard title="Feature Tiers & Alert Rules" color="green">
+                <p className="mb-3">Not all features are equal. Tier-1 features trigger critical alerts; Tier-3 features need investigation before action.</p>
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                    <div className="text-xs font-semibold text-blue-300 mb-1.5">Tier 1 — Core Behavior</div>
+                    <div className="text-[10px] text-zinc-400 space-y-0.5">
+                      <div><code className="text-blue-300">session_count</code> — activity volume</div>
+                      <div><code className="text-blue-300">realtime_ratio</code> — content preference</div>
+                      <div><code className="text-blue-300">home_visit_ratio</code> — navigation pattern</div>
+                      <div><code className="text-blue-300">mobile_ratio</code> — device mix</div>
+                    </div>
+                    <div className="text-[10px] text-red-400 mt-2 font-medium">Severe drift → block or retrain</div>
+                  </div>
+                  <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3">
+                    <div className="text-xs font-semibold text-zinc-300 mb-1.5">Tier 2 — Supporting</div>
+                    <div className="text-[10px] text-zinc-400 space-y-0.5">
+                      <div><code className="text-zinc-300">unique_resources</code></div>
+                      <div><code className="text-zinc-300">unique_resource_types</code></div>
+                      <div><code className="text-zinc-300">tableau_count</code></div>
+                      <div><code className="text-zinc-300">search_count</code> / <code className="text-zinc-300">export_count</code></div>
+                    </div>
+                    <div className="text-[10px] text-amber-400 mt-2 font-medium">Drift → monitor & investigate</div>
+                  </div>
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                    <div className="text-xs font-semibold text-amber-300 mb-1.5">Tier 3 — Fragile / Contextual</div>
+                    <div className="text-[10px] text-zinc-400 space-y-0.5">
+                      <div><code className="text-amber-300">avg_hour</code> — timezone-sensitive</div>
+                      <div><code className="text-amber-300">activity_span_hours</code> — session-dependent</div>
+                      <div><code className="text-amber-300">unique_games</code> — schema-dependent</div>
+                    </div>
+                    <div className="text-[10px] text-amber-400 mt-2 font-medium">Drift → fix pipeline first</div>
+                  </div>
+                </div>
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                  <div className="text-xs font-semibold text-red-300 mb-1">Aggregate Alert Rule</div>
+                  <div className="text-[11px] text-zinc-400">
+                    Trigger <strong className="text-red-300">Critical Drift Alert</strong> if:
+                    <span className="block mt-1">- Any <strong className="text-blue-300">Tier-1</strong> feature has severe drift, OR</span>
+                    <span className="block">- ≥30% of all features have moderate drift</span>
+                  </div>
+                </div>
+              </SectionCard>
+
+              {/* Card 8: Feature Hygiene Plan */}
+              <SectionCard title="Feature Hygiene: Keep, Guard, Version, Replace, Retire" color="green">
+                <p className="mb-3">The most mature ML insight: managing features like a product, not just a model input.</p>
+                <div className="space-y-3">
+                  {/* Keep */}
+                  <div className="flex gap-3 items-start">
+                    <span className="text-xs font-bold bg-green-500/20 text-green-300 px-2 py-0.5 rounded shrink-0 w-20 text-center mt-0.5">Keep</span>
+                    <div className="text-[11px] text-zinc-400">
+                      <code className="text-green-300">session_count</code> (with caps), <code className="text-green-300">mobile_ratio</code>, <code className="text-green-300">search_count</code>
+                      <div className="text-[10px] text-zinc-500 mt-0.5">Stable, valuable, low drift risk when monitored.</div>
+                    </div>
+                  </div>
+                  {/* Guard */}
+                  <div className="flex gap-3 items-start">
+                    <span className="text-xs font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded shrink-0 w-20 text-center mt-0.5">Guard</span>
+                    <div className="text-[11px] text-zinc-400">
+                      <code className="text-amber-300">realtime_ratio</code>, <code className="text-amber-300">home_visit_ratio</code>, <code className="text-amber-300">unique_resources</code>
+                      <div className="text-[10px] text-zinc-500 mt-0.5">Product-dependent features. Version + monitor heavily.</div>
+                    </div>
+                  </div>
+                  {/* Version */}
+                  <div className="flex gap-3 items-start">
+                    <span className="text-xs font-bold bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded shrink-0 w-20 text-center mt-0.5">Version</span>
+                    <div className="text-[11px] text-zinc-400">
+                      Example: <code className="text-blue-300">realtime_ratio_v1</code> (pre-homepage redesign) → <code className="text-blue-300">realtime_ratio_v2</code> (post-redesign).
+                      <div className="text-[10px] text-zinc-500 mt-0.5">Feature versioning as a first-class concept in your feature store.</div>
+                    </div>
+                  </div>
+                  {/* Replace */}
+                  <div className="flex gap-3 items-start">
+                    <span className="text-xs font-bold bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded shrink-0 w-20 text-center mt-0.5">Replace</span>
+                    <div className="text-[11px] text-zinc-400">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                        <span><code className="text-zinc-500">tableau_count</code> →</span><span><code className="text-purple-300">dashboard_views_by_tool</code></span>
+                        <span><code className="text-zinc-500">unique_resources</code> →</span><span><code className="text-purple-300">resource_usage_entropy</code></span>
+                        <span><code className="text-zinc-500">home_visit_ratio</code> →</span><span><code className="text-purple-300">first_page_type</code></span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Retire */}
+                  <div className="flex gap-3 items-start">
+                    <span className="text-xs font-bold bg-red-500/20 text-red-300 px-2 py-0.5 rounded shrink-0 w-20 text-center mt-0.5">Retire</span>
+                    <div className="text-[11px] text-zinc-400">
+                      <code className="text-red-300">avg_hour</code> (timezone fragile), <code className="text-red-300">activity_span_hours</code> (sessionization fragile)
+                      <div className="text-[10px] text-zinc-500 mt-0.5">Unless you control ingestion &amp; timezone strictly, these will burn you.</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-zinc-800/50 rounded-lg p-3 mt-3 border border-zinc-700">
+                  <div className="flex items-start gap-2">
+                    <Lightbulb size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                    <p className="text-xs text-zinc-400">
+                      <strong className="text-zinc-200">Models don&apos;t fail because of bad algorithms. They fail because features silently change meaning.</strong> If your
+                      monitoring shows drift → diagnosis → action (not auto-retrain), you&apos;re ahead of 90% of production ML systems.
+                    </p>
+                  </div>
+                </div>
+              </SectionCard>
+            </>
+          )}
+
           {/* ═══════════════════ COMPUTE & INFRASTRUCTURE ═══════════════════ */}
           {activeSection === "compute" && (
             <>
@@ -1414,6 +1825,12 @@ export default function LearnPage({ onBack }: LearnPageProps) {
                     { term: "TPU", def: "Tensor Processing Unit. Google's custom hardware optimized for large-scale neural network training." },
                     { term: "L2 Regularization", def: "A penalty on large weights during training. Prevents the model from concentrating signal on a single feature, improving generalization." },
                     { term: "Gradient Descent", def: "Optimization algorithm that iteratively adjusts model weights in the direction that reduces the loss function." },
+                    { term: "Data Drift", def: "When the statistical distribution of input features changes between training and production, potentially degrading model accuracy." },
+                    { term: "PSI (Population Stability Index)", def: "A metric measuring how much a feature's distribution has shifted. PSI > 0.25 typically signals significant drift requiring action." },
+                    { term: "Training/Serving Skew", def: "When feature computation in production differs from training. The #1 cause of silent ML failures in production." },
+                    { term: "Feature Tier", def: "A classification of features by impact: Tier 1 (core behavior) triggers alerts, Tier 2 (supporting) needs monitoring, Tier 3 (fragile) needs pipeline fixes first." },
+                    { term: "Feature Versioning", def: "Tracking feature definitions over time (e.g. realtime_ratio_v1 vs v2) to handle product changes without breaking model assumptions." },
+                    { term: "Schema Drift", def: "When the structure of source data changes (new columns, renamed fields, type changes), often disguised as data drift." },
                   ].map((g) => (
                     <div key={g.term} className="flex gap-4 px-5 py-3">
                       <span className="text-sm font-semibold text-zinc-200 shrink-0 w-44">{g.term}</span>

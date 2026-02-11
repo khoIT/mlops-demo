@@ -797,6 +797,28 @@ export const PERSONA_FEATURE_NAMES = [
   "avg_active_hour",
 ];
 
+export interface PersonaFeatureMeta {
+  name: string;
+  label: string;
+  type: "count" | "ratio" | "time";
+  recommendLog: boolean;
+  description: string;
+}
+
+export const PERSONA_FEATURE_META: PersonaFeatureMeta[] = [
+  { name: "total_events_30d", label: "Total Events", type: "count", recommendLog: true, description: "Raw event count — heavy-tail, power users dominate. Log-transform recommended." },
+  { name: "realtime_ratio", label: "Realtime Ratio", type: "ratio", recommendLog: false, description: "Fraction of realtime events. Already 0–1, no transform needed." },
+  { name: "dashboards_viewed", label: "Dashboards Viewed", type: "count", recommendLog: true, description: "Unique dashboard count — skewed. Log-transform recommended." },
+  { name: "games_touched", label: "Games Touched", type: "count", recommendLog: true, description: "Unique game/tableau count — skewed. Log-transform recommended." },
+  { name: "mobile_ratio", label: "Mobile Ratio", type: "ratio", recommendLog: false, description: "Fraction of mobile events. Already 0–1, no transform needed." },
+  { name: "avg_active_hour", label: "Avg Active Hour", type: "time", recommendLog: false, description: "Average hour of activity (0–23). Circular — 23 and 1 are close." },
+];
+
+export interface ClusterConfig {
+  selectedFeatures: string[];
+  logTransformFeatures: string[];
+}
+
 export function cleanLogs(rawLogs: RawLogEntry[]): CleanedLog[] {
   return rawLogs.map((log) => {
     let resourceName = log.resource_name || "";
@@ -1094,21 +1116,43 @@ function interpretClusters(
 
 export function runPersonaClustering(
   personaFeatures: PersonaFeatureRow[],
-  k: number = 3
+  k: number = 3,
+  config?: ClusterConfig
 ): ClusteringResult {
-  // Build feature matrix
+  const featureNames = config?.selectedFeatures ?? PERSONA_FEATURE_NAMES;
+  const logFeatures = new Set(config?.logTransformFeatures ?? []);
+
+  // Build feature matrix with optional log-transform for heavy-tail features
   const X = personaFeatures.map((row) =>
-    PERSONA_FEATURE_NAMES.map((f) => (row as unknown as Record<string, number>)[f] || 0)
+    featureNames.map((f) => {
+      const val = (row as unknown as Record<string, number>)[f] || 0;
+      return logFeatures.has(f) ? Math.log1p(val) : val;
+    })
   );
 
-  // Normalize
+  // Normalize (z-score)
   const { normalized, means, stds } = normalize(X);
 
-  // Run K-Means
-  const { centroids, labels, inertia, iterations } = kMeans(normalized, k);
+  // Run K-Means multiple times, pick best (lowest inertia) for stability
+  let best = kMeans(normalized, k);
+  for (let run = 1; run < 5; run++) {
+    const candidate = kMeans(normalized, k);
+    if (candidate.inertia < best.inertia) best = candidate;
+  }
+  const { centroids, labels, inertia, iterations } = best;
 
-  // Interpret clusters → persona mapping
-  const clusterToPersona = interpretClusters(centroids, PERSONA_FEATURE_NAMES);
+  // Denormalize centroids BEFORE interpretation (scoring needs raw values, not z-scores)
+  const denormCentroids = centroids.map((c) =>
+    c.map((val, j) => {
+      let raw = val * stds[j] + means[j];
+      // Reverse log-transform for display
+      if (logFeatures.has(featureNames[j])) raw = Math.expm1(raw);
+      return Math.round(raw * 100) / 100;
+    })
+  );
+
+  // Interpret clusters → persona mapping (using raw-scale centroids)
+  const clusterToPersona = interpretClusters(denormCentroids, featureNames);
 
   // Build persona definitions
   const personas: PersonaDefinition[] = [];
@@ -1118,26 +1162,30 @@ export function runPersonaClustering(
     personas.push({ ...template, id: c });
   }
 
+  // Compute distance stats for edge-case detection
+  const distances = personaFeatures.map((_, i) =>
+    euclideanDistance(normalized[i], centroids[labels[i]])
+  );
+  const meanDist = distances.reduce((a, b) => a + b, 0) / distances.length;
+  const stdDist = Math.sqrt(distances.reduce((a, b) => a + (b - meanDist) ** 2, 0) / distances.length);
+  const edgeThreshold = meanDist + 1.5 * stdDist;
+
   // Build assignments
   const assignments: UserPersonaAssignment[] = personaFeatures.map(
     (row, i) => {
       const clusterId = labels[i];
-      const dist = euclideanDistance(normalized[i], centroids[clusterId]);
+      const dist = distances[i];
       const persona = personas[clusterId];
       return {
         user_id: row.user_id,
         persona_id: clusterId,
         persona_name: persona.name,
         distance_to_centroid: Math.round(dist * 1000) / 1000,
+        is_edge_case: dist > edgeThreshold,
         recommended_onboarding_type: persona.onboardingType,
         features: row,
       };
     }
-  );
-
-  // Denormalize centroids for display
-  const denormCentroids = centroids.map((c) =>
-    c.map((val, j) => Math.round((val * stds[j] + means[j]) * 100) / 100)
   );
 
   return {
@@ -1147,8 +1195,61 @@ export function runPersonaClustering(
     inertia,
     iterations,
     k,
-    featureNames: PERSONA_FEATURE_NAMES,
+    featureNames,
   };
+}
+
+export function computeElbowData(
+  personaFeatures: PersonaFeatureRow[],
+  kRange: number[] = [2, 3, 4, 5, 6, 7, 8],
+  config?: ClusterConfig
+): { k: number; inertia: number; silhouette: number }[] {
+  const featureNames = config?.selectedFeatures ?? PERSONA_FEATURE_NAMES;
+  const logFeatures = new Set(config?.logTransformFeatures ?? []);
+
+  const X = personaFeatures.map((row) =>
+    featureNames.map((f) => {
+      const val = (row as unknown as Record<string, number>)[f] || 0;
+      return logFeatures.has(f) ? Math.log1p(val) : val;
+    })
+  );
+  const { normalized } = normalize(X);
+
+  return kRange.map((k) => {
+    // Run K-Means 3 times, pick best
+    let best = kMeans(normalized, k);
+    for (let run = 1; run < 3; run++) {
+      const candidate = kMeans(normalized, k);
+      if (candidate.inertia < best.inertia) best = candidate;
+    }
+
+    // Compute silhouette score
+    const n = normalized.length;
+    let silTotal = 0;
+    for (let i = 0; i < n; i++) {
+      const ci = best.labels[i];
+      // a(i): mean distance to same-cluster points
+      const sameCluster = normalized.filter((_, j) => j !== i && best.labels[j] === ci);
+      const a = sameCluster.length > 0
+        ? sameCluster.reduce((sum, p) => sum + euclideanDistance(normalized[i], p), 0) / sameCluster.length
+        : 0;
+      // b(i): min mean distance to other-cluster points
+      let b = Infinity;
+      for (let c = 0; c < k; c++) {
+        if (c === ci) continue;
+        const otherCluster = normalized.filter((_, j) => best.labels[j] === c);
+        if (otherCluster.length === 0) continue;
+        const meanDist = otherCluster.reduce((sum, p) => sum + euclideanDistance(normalized[i], p), 0) / otherCluster.length;
+        b = Math.min(b, meanDist);
+      }
+      if (b === Infinity) b = 0;
+      const s = Math.max(a, b) > 0 ? (b - a) / Math.max(a, b) : 0;
+      silTotal += s;
+    }
+    const silhouette = Math.round((silTotal / n) * 1000) / 1000;
+
+    return { k, inertia: best.inertia, silhouette };
+  });
 }
 
 export function inferPersona(

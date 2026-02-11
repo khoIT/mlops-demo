@@ -14,7 +14,10 @@ import {
   aggregateToPersonaFeatures,
   runPersonaClustering,
   inferPersona,
+  computeElbowData,
   PERSONA_FEATURE_NAMES,
+  PERSONA_FEATURE_META,
+  ClusterConfig,
 } from "@/lib/ml-engine";
 import {
   ArrowRight,
@@ -51,6 +54,9 @@ import {
   YAxis,
   CartesianGrid,
   Cell,
+  LineChart,
+  Line,
+  ReferenceLine,
 } from "recharts";
 
 interface PersonaPipelineProps {
@@ -81,6 +87,33 @@ export default function PersonaPipeline({ rawLogs, onDataUpload }: PersonaPipeli
   const [selectedInferenceUser, setSelectedInferenceUser] = useState<string>("");
   const [inferenceResult, setInferenceResult] = useState<UserPersonaAssignment | null>(null);
 
+  // Feature selection + transform config
+  const [selectedFeatures, setSelectedFeatures] = useState<string[]>([...PERSONA_FEATURE_NAMES]);
+  const [logTransformFeatures, setLogTransformFeatures] = useState<string[]>(
+    PERSONA_FEATURE_META.filter((m) => m.recommendLog).map((m) => m.name)
+  );
+
+  const clusterConfig: ClusterConfig = useMemo(() => ({
+    selectedFeatures,
+    logTransformFeatures: logTransformFeatures.filter((f) => selectedFeatures.includes(f)),
+  }), [selectedFeatures, logTransformFeatures]);
+
+  const toggleFeature = useCallback((name: string) => {
+    setSelectedFeatures((prev) => {
+      if (prev.includes(name)) {
+        if (prev.length <= 2) return prev; // need at least 2 features
+        return prev.filter((f) => f !== name);
+      }
+      return [...prev, name];
+    });
+  }, []);
+
+  const toggleLogTransform = useCallback((name: string) => {
+    setLogTransformFeatures((prev) =>
+      prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name]
+    );
+  }, []);
+
   // Step 1: Clean logs
   const cleanedLogs = useMemo(() => cleanLogs(rawLogs), [rawLogs]);
 
@@ -91,10 +124,10 @@ export default function PersonaPipeline({ rawLogs, onDataUpload }: PersonaPipeli
   );
 
   const handleRunClustering = useCallback(() => {
-    const result = runPersonaClustering(personaFeatures, kValue);
+    const result = runPersonaClustering(personaFeatures, kValue, clusterConfig);
     setClusteringResult(result);
     setActiveStep(5);
-  }, [personaFeatures, kValue]);
+  }, [personaFeatures, kValue, clusterConfig]);
 
   const handleInfer = useCallback(
     (userId: string) => {
@@ -116,7 +149,7 @@ export default function PersonaPipeline({ rawLogs, onDataUpload }: PersonaPipeli
   // Radar chart data for persona centroids
   const radarData = useMemo(() => {
     if (!clusteringResult) return [];
-    return PERSONA_FEATURE_NAMES.map((feat, fi) => {
+    return clusteringResult.featureNames.map((feat, fi) => {
       const entry: Record<string, string | number> = { feature: feat.replace(/_/g, " ") };
       clusteringResult.personas.forEach((p, pi) => {
         entry[p.name] = clusteringResult.centroids[pi]?.[fi] ?? 0;
@@ -124,6 +157,12 @@ export default function PersonaPipeline({ rawLogs, onDataUpload }: PersonaPipeli
       return entry;
     });
   }, [clusteringResult]);
+
+  // Elbow chart data (inertia + silhouette for K=2..8)
+  const elbowData = useMemo(
+    () => computeElbowData(personaFeatures, undefined, clusterConfig),
+    [personaFeatures, clusterConfig]
+  );
 
   // Scatter data for cluster visualization
   const scatterData = useMemo(() => {
@@ -577,6 +616,53 @@ export default function PersonaPipeline({ rawLogs, onDataUpload }: PersonaPipeli
         {/* ─── Step 5: Run Clustering ─── */}
         {activeStep === 5 && (
           <div className="space-y-4">
+            {/* Feature Selection + Transform Panel */}
+            <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-semibold text-zinc-300">Feature Selection &amp; Transforms</h4>
+                <span className="text-[10px] text-zinc-500">{selectedFeatures.length} of {PERSONA_FEATURE_META.length} features active · Min 2</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {PERSONA_FEATURE_META.map((meta) => {
+                  const isSelected = selectedFeatures.includes(meta.name);
+                  const isLogActive = logTransformFeatures.includes(meta.name);
+                  return (
+                    <div
+                      key={meta.name}
+                      className={`rounded-lg border p-2.5 transition-all ${isSelected ? "border-blue-500/40 bg-blue-500/5" : "border-zinc-800 bg-zinc-900/50 opacity-50"}`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <button
+                          onClick={() => toggleFeature(meta.name)}
+                          className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] font-bold transition-colors ${isSelected ? "bg-blue-500 border-blue-500 text-white" : "border-zinc-600 text-transparent"}`}
+                        >
+                          ✓
+                        </button>
+                        <span className={`text-xs font-semibold ${isSelected ? "text-zinc-200" : "text-zinc-500"}`}>{meta.label}</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${meta.type === "count" ? "bg-amber-500/10 text-amber-400" : meta.type === "ratio" ? "bg-green-500/10 text-green-400" : "bg-purple-500/10 text-purple-400"}`}>
+                          {meta.type}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 mb-1.5 ml-6">{meta.description}</p>
+                      {isSelected && meta.type === "count" && (
+                        <div className="ml-6 flex items-center gap-1.5">
+                          <button
+                            onClick={() => toggleLogTransform(meta.name)}
+                            className={`text-[9px] px-2 py-0.5 rounded-full border transition-colors ${isLogActive ? "bg-amber-500/20 border-amber-500/40 text-amber-300" : "border-zinc-700 text-zinc-500 hover:border-zinc-600"}`}
+                          >
+                            log(1+x) {isLogActive ? "ON" : "OFF"}
+                          </button>
+                          {meta.recommendLog && !isLogActive && (
+                            <span className="text-[9px] text-amber-500/60">⚠ recommended</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="flex items-center gap-4">
               <div className="bg-zinc-800 rounded-lg px-4 py-3 flex items-center gap-3">
                 <label className="text-xs text-zinc-400">K (number of personas):</label>
@@ -632,19 +718,25 @@ export default function PersonaPipeline({ rawLogs, onDataUpload }: PersonaPipeli
                           <th className="px-3 py-2.5 text-left text-zinc-400 font-semibold">persona_id</th>
                           <th className="px-3 py-2.5 text-left text-zinc-400 font-semibold">persona_name</th>
                           <th className="px-3 py-2.5 text-left text-zinc-400 font-semibold">distance</th>
+                          <th className="px-3 py-2.5 text-left text-zinc-400 font-semibold">flag</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-800/50">
                         {clusteringResult.assignments.map((a) => {
                           const color = clusteringResult.personas.find((p) => p.id === a.persona_id)?.color || "#666";
                           return (
-                            <tr key={a.user_id} className="hover:bg-zinc-800/30">
+                            <tr key={a.user_id} className={`hover:bg-zinc-800/30 ${a.is_edge_case ? "bg-amber-500/5" : ""}`}>
                               <td className="px-3 py-2 text-cyan-400 font-mono">{a.user_id}</td>
                               <td className="px-3 py-2 font-mono" style={{ color }}>{a.persona_id}</td>
                               <td className="px-3 py-2 font-semibold" style={{ color }}>{a.persona_name}</td>
                               <td className="px-3 py-2 text-zinc-500 font-mono">
                                 {a.distance_to_centroid < 1 ? "low" : a.distance_to_centroid < 2 ? "medium" : "high"}
                                 <span className="text-zinc-600 ml-1">({a.distance_to_centroid})</span>
+                              </td>
+                              <td className="px-3 py-2">
+                                {a.is_edge_case && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">edge case</span>
+                                )}
                               </td>
                             </tr>
                           );
@@ -654,10 +746,76 @@ export default function PersonaPipeline({ rawLogs, onDataUpload }: PersonaPipeli
                   </div>
                 </div>
 
+                {/* Elbow + Silhouette charts */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-zinc-800/50 rounded-lg p-4">
+                    <h4 className="text-xs font-semibold text-zinc-300 mb-1">Elbow Chart — Inertia vs K</h4>
+                    <p className="text-[10px] text-zinc-500 mb-2">Lower inertia = tighter clusters. Look for the &quot;elbow&quot; where adding more K gives diminishing returns.</p>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={elbowData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                        <XAxis dataKey="k" tick={{ fill: "#71717a", fontSize: 10 }} axisLine={{ stroke: "#3f3f46" }} label={{ value: "K (clusters)", position: "bottom", fill: "#52525b", fontSize: 10 }} />
+                        <YAxis tick={{ fill: "#71717a", fontSize: 10 }} axisLine={{ stroke: "#3f3f46" }} label={{ value: "Inertia", angle: -90, position: "left", fill: "#52525b", fontSize: 10 }} />
+                        <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: "11px" }} />
+                        <ReferenceLine x={kValue} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: `K=${kValue}`, fill: "#f59e0b", fontSize: 10, position: "top" }} />
+                        <Line type="monotone" dataKey="inertia" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", r: 4 }} activeDot={{ r: 6 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-4">
+                    <h4 className="text-xs font-semibold text-zinc-300 mb-1">Silhouette Score vs K</h4>
+                    <p className="text-[10px] text-zinc-500 mb-2">Higher = better separated clusters. Range: -1 to 1. Above 0.5 is good, above 0.7 is strong.</p>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={elbowData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                        <XAxis dataKey="k" tick={{ fill: "#71717a", fontSize: 10 }} axisLine={{ stroke: "#3f3f46" }} label={{ value: "K (clusters)", position: "bottom", fill: "#52525b", fontSize: 10 }} />
+                        <YAxis domain={[-0.2, 1]} tick={{ fill: "#71717a", fontSize: 10 }} axisLine={{ stroke: "#3f3f46" }} label={{ value: "Silhouette", angle: -90, position: "left", fill: "#52525b", fontSize: 10 }} />
+                        <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: "11px" }} />
+                        <ReferenceLine x={kValue} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: `K=${kValue}`, fill: "#f59e0b", fontSize: 10, position: "top" }} />
+                        <ReferenceLine y={0.5} stroke="#22c55e" strokeDasharray="3 3" label={{ value: "Good", fill: "#22c55e", fontSize: 9, position: "right" }} />
+                        <Line type="monotone" dataKey="silhouette" stroke="#a855f7" strokeWidth={2} dot={{ fill: "#a855f7", r: 4 }} activeDot={{ r: 6 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Current K summary */}
+                {(() => {
+                  const currentElbow = elbowData.find((e) => e.k === kValue);
+                  const bestSilK = elbowData.reduce((best, e) => e.silhouette > best.silhouette ? e : best, elbowData[0]);
+                  return currentElbow ? (
+                    <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 flex items-center gap-6 text-xs">
+                      <div>
+                        <span className="text-zinc-500">Current K:</span>{" "}
+                        <span className="text-amber-400 font-bold">{kValue}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500">Inertia:</span>{" "}
+                        <span className="text-blue-400 font-mono">{currentElbow.inertia}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500">Silhouette:</span>{" "}
+                        <span className={`font-mono ${currentElbow.silhouette >= 0.5 ? "text-green-400" : currentElbow.silhouette >= 0.25 ? "text-amber-400" : "text-red-400"}`}>{currentElbow.silhouette}</span>
+                      </div>
+                      <div className="ml-auto">
+                        {bestSilK.k !== kValue && (
+                          <span className="text-zinc-500">
+                            Best silhouette at <span className="text-purple-400 font-bold">K={bestSilK.k}</span> ({bestSilK.silhouette})
+                          </span>
+                        )}
+                        {bestSilK.k === kValue && (
+                          <span className="text-green-400">Current K has the best silhouette score</span>
+                        )}
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+
                 <div className="grid grid-cols-2 gap-4">
                   {/* Scatter plot */}
                   <div className="bg-zinc-800/50 rounded-lg p-4">
                     <h4 className="text-xs font-semibold text-zinc-300 mb-2">Cluster Scatter (events vs realtime_ratio)</h4>
+                    <p className="text-[10px] text-zinc-500 mb-2">Points are fixed (same data). Colors show cluster assignment. This is a 2D projection of 6D clustering.</p>
                     <ResponsiveContainer width="100%" height={220}>
                       <ScatterChart>
                         <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />

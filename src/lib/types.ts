@@ -111,6 +111,7 @@ export interface UserPersonaAssignment {
   persona_id: number;
   persona_name: string;
   distance_to_centroid: number;
+  is_edge_case?: boolean;
   recommended_onboarding_type: string;
   features: PersonaFeatureRow;
 }
