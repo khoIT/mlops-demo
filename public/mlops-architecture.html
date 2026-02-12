@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLOps Platform Architecture — Data Flow</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: #0a0a0f;
+    color: #e4e4e7;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 48px 24px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    color: #f4f4f5;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #71717a;
+    font-size: 14px;
+    margin-bottom: 48px;
+  }
+  .subtitle em { color: #a1a1aa; font-style: normal; }
+
+  /* ─── Pipeline Flow ─── */
+  .pipeline {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    position: relative;
+    margin-bottom: 48px;
+  }
+
+  .step-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    position: relative;
+  }
+
+  .step {
+    flex: 1;
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .step:hover { transform: translateY(-4px); }
+
+  .step-card {
+    border-radius: 16px;
+    padding: 24px 18px;
+    text-align: center;
+    position: relative;
+    border: 1.5px solid transparent;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .step:hover .step-card {
+    box-shadow: 0 0 30px rgba(255,255,255,0.03);
+  }
+  .step.active .step-card {
+    border-color: rgba(255,255,255,0.15);
+    box-shadow: 0 0 40px rgba(255,255,255,0.05);
+  }
+
+  .step-number {
+    position: absolute;
+    top: 10px;
+    left: 14px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #52525b;
+    letter-spacing: 0.5px;
+  }
+
+  .step-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    font-size: 22px;
+  }
+
+  .step-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .step-desc {
+    font-size: 11px;
+    color: #71717a;
+    line-height: 1.4;
+  }
+
+  /* Step colors */
+  .step-0 .step-card { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
+  .step-0 .step-icon { background: rgba(59,130,246,0.15); }
+  .step-0 .step-title { color: #60a5fa; }
+  .step-0.active .step-card { border-color: rgba(59,130,246,0.3); box-shadow: 0 0 40px rgba(59,130,246,0.08); }
+
+  .step-1 .step-card { background: linear-gradient(135deg, #1a2e1a 0%, #1e3a1e 100%); }
+  .step-1 .step-icon { background: rgba(34,197,94,0.15); }
+  .step-1 .step-title { color: #4ade80; }
+  .step-1.active .step-card { border-color: rgba(34,197,94,0.3); box-shadow: 0 0 40px rgba(34,197,94,0.08); }
+
+  .step-2 .step-card { background: linear-gradient(135deg, #2e1a2e 0%, #3e1640 100%); }
+  .step-2 .step-icon { background: rgba(168,85,247,0.15); }
+  .step-2 .step-title { color: #c084fc; }
+  .step-2.active .step-card { border-color: rgba(168,85,247,0.3); box-shadow: 0 0 40px rgba(168,85,247,0.08); }
+
+  .step-3 .step-card { background: linear-gradient(135deg, #2e2a1a 0%, #3e3216 100%); }
+  .step-3 .step-icon { background: rgba(251,191,36,0.15); }
+  .step-3 .step-title { color: #fbbf24; }
+  .step-3.active .step-card { border-color: rgba(251,191,36,0.3); box-shadow: 0 0 40px rgba(251,191,36,0.08); }
+
+  .step-4 .step-card { background: linear-gradient(135deg, #2e1a1a 0%, #3e1616 100%); }
+  .step-4 .step-icon { background: rgba(239,68,68,0.15); }
+  .step-4 .step-title { color: #f87171; }
+  .step-4.active .step-card { border-color: rgba(239,68,68,0.3); box-shadow: 0 0 40px rgba(239,68,68,0.08); }
+
+  /* Arrows between steps */
+  .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    flex-shrink: 0;
+    padding-top: 50px;
+  }
+  .arrow svg {
+    color: #3f3f46;
+    transition: color 0.3s;
+  }
+  .arrow.lit svg { color: #a1a1aa; }
+
+  /* ─── Detail Panel ─── */
+  .detail-panel {
+    background: #111118;
+    border: 1px solid #27272a;
+    border-radius: 16px;
+    padding: 32px;
+    min-height: 320px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #1f1f28;
+  }
+  .detail-header .badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+  }
+  .detail-header h2 {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .detail-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .detail-section h3 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #71717a;
+    margin-bottom: 10px;
+  }
+
+  .detail-section ul {
+    list-style: none;
+    padding: 0;
+  }
+  .detail-section ul li {
+    font-size: 13px;
+    color: #a1a1aa;
+    padding: 5px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    line-height: 1.4;
+  }
+  .detail-section ul li::before {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+
+  .color-blue li::before { background: #60a5fa; }
+  .color-green li::before { background: #4ade80; }
+  .color-purple li::before { background: #c084fc; }
+  .color-amber li::before { background: #fbbf24; }
+  .color-red li::before { background: #f87171; }
+
+  .detail-tag {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #a1a1aa;
+    margin: 2px 3px 2px 0;
+  }
+
+  /* pLTV callout */
+  .pltv-callout {
+    margin-top: 20px;
+    padding: 16px;
+    background: rgba(59,130,246,0.05);
+    border: 1px solid rgba(59,130,246,0.12);
+    border-radius: 12px;
+    grid-column: 1 / -1;
+  }
+  .pltv-callout h4 {
+    font-size: 12px;
+    font-weight: 700;
+    color: #60a5fa;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pltv-callout p {
+    font-size: 12px;
+    color: #71717a;
+    line-height: 1.5;
+  }
+
+  /* ─── Model Family Bar ─── */
+  .model-families {
+    margin-top: 48px;
+    padding: 24px;
+    background: #111118;
+    border: 1px solid #27272a;
+    border-radius: 16px;
+  }
+  .model-families h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #d4d4d8;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .families-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .family-card {
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #27272a;
+    background: #18181b;
+    transition: border-color 0.2s, transform 0.2s;
+    cursor: default;
+  }
+  .family-card:hover {
+    border-color: #3f3f46;
+    transform: translateY(-2px);
+  }
+  .family-emoji { font-size: 20px; margin-bottom: 8px; }
+  .family-name {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .family-q {
+    font-size: 11px;
+    color: #71717a;
+    font-style: italic;
+    line-height: 1.3;
+  }
+  .family-card:nth-child(1) .family-name { color: #60a5fa; }
+  .family-card:nth-child(2) .family-name { color: #fbbf24; }
+  .family-card:nth-child(3) .family-name { color: #f87171; }
+  .family-card:nth-child(4) .family-name { color: #c084fc; }
+
+  /* ─── Entity note ─── */
+  .entity-bar {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .entity-chip {
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 8px;
+    border: 1px solid #27272a;
+    background: #18181b;
+    color: #a1a1aa;
+  }
+  .entity-chip strong { color: #d4d4d8; }
+
+  /* ─── Sample Data Tables ─── */
+  .sample-tables {
+    margin-top: 20px;
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .sample-table-section {
+    background: #0d0d14;
+    border: 1px solid #1f1f28;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .sample-table-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #1f1f28;
+    font-size: 12px;
+    font-weight: 700;
+    color: #d4d4d8;
+  }
+  .sample-table-header .count { color: #71717a; font-weight: 400; font-size: 11px; }
+  .sample-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .sample-table thead th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    color: #52525b;
+    border-bottom: 1px solid #1f1f28;
+    white-space: nowrap;
+  }
+  .sample-table tbody tr {
+    border-bottom: 1px solid #18181b;
+    transition: background 0.1s;
+  }
+  .sample-table tbody tr:hover { background: rgba(255,255,255,0.015); }
+  .sample-table td {
+    padding: 7px 12px;
+    color: #a1a1aa;
+    white-space: nowrap;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 10.5px;
+  }
+  .sample-table .uid { color: #60a5fa; }
+  .sample-table .channel { color: #a1a1aa; }
+  .sample-table .event-name {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .ev-session { background: rgba(59,130,246,0.12); color: #60a5fa; }
+  .ev-purchase { background: rgba(34,197,94,0.12); color: #4ade80; }
+  .ev-dungeon { background: rgba(239,68,68,0.12); color: #f87171; }
+  .ev-chat { background: rgba(168,85,247,0.12); color: #c084fc; }
+  .ev-guild { background: rgba(251,191,36,0.12); color: #fbbf24; }
+  .ev-quest { background: rgba(34,197,94,0.12); color: #4ade80; }
+  .ev-pvp { background: rgba(239,68,68,0.12); color: #f87171; }
+  .ev-gacha { background: rgba(251,191,36,0.12); color: #fbbf24; }
+  .sample-table .params { color: #52525b; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  .sample-table .consent { text-align: center; }
+
+  /* ─── Model Card ─── */
+  .model-card-grid {
+    margin-top: 20px;
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .model-info-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+  .model-info-box {
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #27272a;
+    background: #0d0d14;
+  }
+  .model-info-box h4 {
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .model-info-box .info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    padding: 3px 0;
+  }
+  .model-info-box .info-label { color: #52525b; }
+  .model-info-box .info-value { color: #d4d4d8; font-family: 'SF Mono', Monaco, Consolas, monospace; }
+  .model-info-box .info-value.highlight { color: #4ade80; }
+
+  .model-stats-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  .model-stat-card {
+    padding: 14px;
+    border-radius: 10px;
+    border: 1px solid #27272a;
+    background: #0d0d14;
+    text-align: center;
+  }
+  .model-stat-card .stat-label { font-size: 9px; color: #52525b; text-transform: uppercase; letter-spacing: 0.8px; }
+  .model-stat-card .stat-name { font-size: 11px; color: #a1a1aa; font-weight: 700; margin: 2px 0; }
+  .model-stat-card .stat-value { font-size: 18px; font-weight: 700; font-family: 'SF Mono', Monaco, Consolas, monospace; }
+  .stat-green { color: #4ade80; }
+  .stat-amber { color: #fbbf24; }
+  .stat-cyan { color: #22d3ee; }
+  .stat-purple { color: #c084fc; }
+
+  .fi-section {
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #27272a;
+    background: #0d0d14;
+  }
+  .fi-section h4 {
+    font-size: 11px;
+    font-weight: 700;
+    color: #d4d4d8;
+    margin-bottom: 12px;
+  }
+  .fi-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 11px;
+  }
+  .fi-bar-label { width: 160px; text-align: right; color: #71717a; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fi-bar-track { flex: 1; height: 14px; background: #18181b; border-radius: 4px; overflow: hidden; position: relative; }
+  .fi-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+  .fi-bar-val { width: 40px; text-align: right; color: #52525b; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 10px; flex-shrink: 0; }
+
+  .model-train-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: rgba(168,85,247,0.1);
+    border: 1px solid rgba(168,85,247,0.2);
+    font-size: 12px;
+    color: #c084fc;
+    font-weight: 600;
+  }
+  .model-train-badge .meta { color: #71717a; font-weight: 400; }
+
+  /* ─── Decision Profile Table Example ─── */
+  .dpt-section {
+    margin-top: 48px;
+    padding: 32px;
+    background: #111118;
+    border: 1px solid #27272a;
+    border-radius: 16px;
+  }
+  .dpt-section > h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fbbf24;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dpt-subtitle {
+    font-size: 12px;
+    color: #71717a;
+    margin-bottom: 20px;
+  }
+  .dpt-flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .dpt-flow-step {
+    font-size: 11px;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+  .dpt-flow-arrow {
+    color: #3f3f46;
+    font-size: 14px;
+  }
+  .dpt-table-wrap {
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid #27272a;
+  }
+  .dpt-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .dpt-table thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #52525b;
+    border-bottom: 1px solid #27272a;
+    white-space: nowrap;
+  }
+  .dpt-table thead th.group-model { color: #c084fc; border-bottom: 2px solid rgba(168,85,247,0.3); }
+  .dpt-table thead th.group-rule { color: #fbbf24; border-bottom: 2px solid rgba(251,191,36,0.3); }
+  .dpt-table thead th.group-output { color: #4ade80; border-bottom: 2px solid rgba(34,197,94,0.3); }
+  .dpt-table tbody tr {
+    border-bottom: 1px solid #1f1f28;
+    transition: background 0.15s;
+  }
+  .dpt-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .dpt-table td {
+    padding: 10px 14px;
+    color: #a1a1aa;
+    white-space: nowrap;
+  }
+  .dpt-table .cohort-name { color: #d4d4d8; font-weight: 600; }
+  .dpt-table .score { font-family: 'SF Mono', Monaco, Consolas, monospace; }
+  .dpt-table .score-high { color: #4ade80; }
+  .dpt-table .score-mid { color: #fbbf24; }
+  .dpt-table .score-low { color: #f87171; }
+  .dpt-action {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 6px;
+    display: inline-block;
+  }
+  .dpt-action.scale { background: rgba(34,197,94,0.12); color: #4ade80; }
+  .dpt-action.hold { background: rgba(251,191,36,0.12); color: #fbbf24; }
+  .dpt-action.reduce { background: rgba(239,68,68,0.12); color: #f87171; }
+  .dpt-action.kill { background: rgba(239,68,68,0.2); color: #ef4444; }
+
+  .dpt-legend {
+    margin-top: 16px;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .dpt-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #71717a;
+  }
+  .dpt-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .dpt-anatomy {
+    margin-top: 24px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .dpt-anatomy-card {
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #27272a;
+    background: #18181b;
+  }
+  .dpt-anatomy-card h4 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+  }
+  .dpt-anatomy-card ul {
+    list-style: none;
+    padding: 0;
+  }
+  .dpt-anatomy-card li {
+    font-size: 11px;
+    color: #71717a;
+    padding: 3px 0;
+    line-height: 1.4;
+  }
+  .dpt-anatomy-card li code {
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.05);
+    color: #a1a1aa;
+  }
+
+  /* Animations */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .detail-panel { animation: fadeIn 0.3s ease; }
+
+  /* ─── Responsive ─── */
+  @media (max-width: 900px) {
+    .pipeline { flex-direction: column; align-items: stretch; }
+    .step-wrapper { flex-direction: column; }
+    .arrow { width: auto; height: 30px; padding-top: 0; transform: rotate(90deg); }
+    .detail-body { grid-template-columns: 1fr; }
+    .families-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>🏗️ MLOps Platform Architecture</h1>
+  <p class="subtitle">A <em>reusable predictive primitive system</em> feeding a flexible business decision engine</p>
+
+  <!-- Pipeline Steps -->
+  <div class="pipeline" id="pipeline">
+    <!-- Steps injected by JS -->
+  </div>
+
+  <!-- Detail Panel -->
+  <div class="detail-panel" id="detail-panel">
+    <!-- Injected by JS on step click -->
+  </div>
+
+  <!-- Model Families -->
+  <div class="model-families">
+    <h3>🧬 Four Model Families That Power Every Decision</h3>
+    <div class="families-grid">
+      <div class="family-card">
+        <div class="family-emoji">💎</div>
+        <div class="family-name">Value (pLTV)</div>
+        <div class="family-q">Not "who paid a lot?" — but "who will be worth investing in?"</div>
+      </div>
+      <div class="family-card">
+        <div class="family-emoji">⚠️</div>
+        <div class="family-name">Risk (Churn / Survival)</div>
+        <div class="family-q">Not "inactive users" — but "who are we about to lose?"</div>
+      </div>
+      <div class="family-card">
+        <div class="family-emoji">🎁</div>
+        <div class="family-name">Responsiveness</div>
+        <div class="family-q">Not "big vs small spender" — but "who responds to which incentive?"</div>
+      </div>
+      <div class="family-card">
+        <div class="family-emoji">🎭</div>
+        <div class="family-name">Behavioral Role</div>
+        <div class="family-q">Not "persona cluster" — but "what kind of player is this?"</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── Extra HTML for specific steps ──────────────────────────────────────────
+
+const RAW_LOGS_EXTRA = `
+<div class="sample-tables">
+  <!-- Players Table -->
+  <div class="sample-table-section">
+    <div class="sample-table-header">🎮 Players <span class="count">(2,000 of 2,000)</span></div>
+    <div style="overflow-x:auto">
+      <table class="sample-table">
+        <thead><tr>
+          <th>game_user_id</th><th>channel</th><th>country</th><th>os</th><th>device_tier</th><th>device_model</th><th>campaign</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="uid">player_0016</td><td>unity_ads</td><td>KR</td><td>ios</td><td>mid</td><td>iPad Pro 12.9</td><td>l2n_lookalike_jp</td></tr>
+          <tr><td class="uid">player_0017</td><td>organic</td><td>KR</td><td>android</td><td>low</td><td>OnePlus 12</td><td>l2n_launch_kz</td></tr>
+          <tr><td class="uid">player_0018</td><td>google_uac</td><td>KR</td><td>android</td><td>high</td><td>Samsung Galaxy S24</td><td>l2n_broad_sea</td></tr>
+          <tr><td class="uid">player_0019</td><td>google_uac</td><td>TH</td><td>ios</td><td>mid</td><td>iPhone 13</td><td>l2n_broad_sea</td></tr>
+          <tr><td class="uid">player_0020</td><td>unity_ads</td><td>KR</td><td>ios</td><td>low</td><td>iPhone 15 Pro</td><td>l2n_broad_sea</td></tr>
+          <tr><td class="uid">player_0021</td><td>organic</td><td>JP</td><td>android</td><td>high</td><td>Samsung Galaxy S24</td><td>l2n_retarget_us</td></tr>
+          <tr><td class="uid">player_0022</td><td>meta_ads</td><td>JP</td><td>ios</td><td>low</td><td>iPhone 14</td><td>l2n_broad_sea</td></tr>
+          <tr><td class="uid">player_0023</td><td>tiktok</td><td>DE</td><td>ios</td><td>low</td><td>iPhone 13</td><td>l2n_brand_global</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Event Log Table -->
+  <div class="sample-table-section">
+    <div class="sample-table-header">📋 Event Log <span class="count">(428,902 of 428,902)</span></div>
+    <div style="overflow-x:auto">
+      <table class="sample-table">
+        <thead><tr>
+          <th>game_user_id</th><th>event_time</th><th>event_name</th><th>session_id</th><th>params</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="uid">player_1975</td><td>12/4/2024, 5:29:04 PM</td><td><span class="event-name ev-session">session_start</span></td><td>sess_1974_26</td><td class="params">–</td></tr>
+          <tr><td class="uid">player_0268</td><td>11/11/2024, 11:16:00 PM</td><td><span class="event-name ev-dungeon">dungeon_clear</span></td><td>sess_267_6</td><td class="params">dungeon=plains_of_glory; time_sec=216</td></tr>
+          <tr><td class="uid">player_0030</td><td>1/28/2025, 11:38:54 AM</td><td><span class="event-name ev-chat">chat_message</span></td><td>sess_686_1</td><td class="params">channel=trade</td></tr>
+          <tr><td class="uid">player_0535</td><td>1/3/2025, 11:45:02 AM</td><td><span class="event-name ev-session">session_end</span></td><td>sess_534_17</td><td class="params">duration_seconds=2400</td></tr>
+          <tr><td class="uid">player_0424</td><td>12/22/2024, 8:40:04 PM</td><td><span class="event-name ev-guild">guild_activity</span></td><td>sess_423_11</td><td class="params">type=guild_donate</td></tr>
+          <tr><td class="uid">player_0538</td><td>12/9/2024, 8:33:01 PM</td><td><span class="event-name ev-quest">quest_complete</span></td><td>sess_537_8</td><td class="params">quest=main_quest_63; xp=2434</td></tr>
+          <tr><td class="uid">player_0129</td><td>11/29/2024, 7:11:19 AM</td><td><span class="event-name ev-pvp">pvp_run</span></td><td>sess_128_17</td><td class="params">arena=forge_of_gods; mobs_killed=87</td></tr>
+          <tr><td class="uid">player_0069</td><td>1/30/2025, 8:21:47 AM</td><td><span class="event-name ev-chat">chat_message</span></td><td>sess_68_6</td><td class="params">channel=world</td></tr>
+          <tr><td class="uid">player_0533</td><td>11/25/2024, 8:08:16 AM</td><td><span class="event-name ev-gacha">gacha_open</span></td><td>sess_532_4</td><td class="params">type=weapon_gacha; pulls=2; rarity=legendary</td></tr>
+          <tr><td class="uid">player_0024</td><td>1/3/2025, 8:29:56 PM</td><td><span class="event-name ev-pvp">final_pvp</span></td><td>sess_23_3</td><td class="params">–</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>`;
+
+const MODEL_SCORING_EXTRA = `
+<div class="model-card-grid">
+  <!-- Train badge -->
+  <div class="model-train-badge">
+    ▶ Train pLTV Model on ds_v1 <span class="meta">&nbsp;·&nbsp; Trained in 1694ms &nbsp;·&nbsp; 781 train / 196 test &nbsp;·&nbsp; Type: GBT (Warm-start)</span>
+  </div>
+
+  <!-- Info row: Dataset, Target, Model Track -->
+  <div class="model-info-row">
+    <div class="model-info-box">
+      <h4 style="color:#60a5fa">📊 Training Dataset</h4>
+      <div style="font-size:12px;color:#d4d4d8;font-weight:600;margin-bottom:8px;padding:6px 10px;background:#18181b;border-radius:6px">ds_v1 [Train] — 977 users / 2024-10→2024-11</div>
+      <div class="info-row"><span class="info-label">Role</span><span class="info-value highlight">train</span></div>
+      <div class="info-row"><span class="info-label">Users</span><span class="info-value">977</span></div>
+      <div class="info-row"><span class="info-label">Payer %</span><span class="info-value">22.8%</span></div>
+      <div class="info-row"><span class="info-label">Avg LTV</span><span class="info-value highlight">$83.01</span></div>
+      <div class="info-row"><span class="info-label">Dates</span><span class="info-value">2024-10-01 → 2024-11-30</span></div>
+    </div>
+    <div class="model-info-box">
+      <h4 style="color:#4ade80">🎯 Target Variable</h4>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0">
+        <span style="width:10px;height:10px;border-radius:50%;background:#4ade80"></span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#4ade80">LTV D60</div>
+          <div style="font-size:10px;color:#71717a">Revenue → day 60</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;opacity:0.5">
+        <span style="width:10px;height:10px;border-radius:50%;background:#3f3f46"></span>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#a1a1aa">LTV D30</div>
+          <div style="font-size:10px;color:#52525b">Revenue → day 30</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:10px;color:#71717a">
+        <span style="width:8px;height:8px;border-radius:2px;background:#4ade80"></span> Log-transform: <code style="font-size:10px;color:#4ade80;background:rgba(34,197,94,0.1);padding:1px 6px;border-radius:3px">log(1+LTV)</code>
+      </div>
+    </div>
+    <div class="model-info-box">
+      <h4 style="color:#c084fc">⚙️ Model Track</h4>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <span style="padding:6px 16px;border-radius:6px;font-size:11px;font-weight:600;background:#18181b;color:#71717a;border:1px solid #27272a">Cold-start</span>
+        <span style="padding:6px 16px;border-radius:6px;font-size:11px;font-weight:600;background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3)">Warm-start</span>
+      </div>
+      <div style="font-size:10px;color:#71717a;line-height:1.4">Includes D7 revenue features → higher precision for payers.</div>
+      <div style="margin-top:10px;font-size:10px;color:#52525b">
+        <div class="info-row"><span class="info-label">Version</span><span class="info-value">v2.3.1</span></div>
+        <div class="info-row"><span class="info-label">Last retrained</span><span class="info-value">2025-01-28</span></div>
+        <div class="info-row"><span class="info-label">Drift status</span><span class="info-value highlight">✓ stable</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Metric stat cards -->
+  <div class="model-stats-row">
+    <div class="model-stat-card">
+      <div class="stat-label">Mean Absolute Error</div>
+      <div class="stat-name">MAE</div>
+      <div class="stat-value stat-green">$27.18</div>
+    </div>
+    <div class="model-stat-card">
+      <div class="stat-label">Root Mean Squared Error</div>
+      <div class="stat-name">RMSE</div>
+      <div class="stat-value stat-amber">$134.81</div>
+    </div>
+    <div class="model-stat-card">
+      <div class="stat-label">Variance explained</div>
+      <div class="stat-name">R²</div>
+      <div class="stat-value stat-cyan">0.83</div>
+    </div>
+    <div class="model-stat-card">
+      <div class="stat-label">How much more top 10% spends vs avg</div>
+      <div class="stat-name">Top Decile Lift</div>
+      <div class="stat-value stat-green">9.02x</div>
+    </div>
+    <div class="model-stat-card">
+      <div class="stat-label">% of total revenue in top decile</div>
+      <div class="stat-name">Top 10% Capture</div>
+      <div class="stat-value stat-purple">92%</div>
+    </div>
+  </div>
+
+  <!-- Feature Importance -->
+  <div class="fi-section">
+    <h4>Feature Importance (Top 15)</h4>
+    <div id="fi-bars"></div>
+  </div>
+</div>`;
+
+const DPT_EXTRA = `
+<div style="margin-top:20px;grid-column:1/-1;">
+  <h3 style="font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:4px">📋 Example: UA1 — "How much to bid for this cohort?"</h3>
+  <p style="font-size:11px;color:#71717a;margin-bottom:16px">Model Family: 💎 Value (pLTV) &nbsp;·&nbsp; Entity: Cohort (Channel × Country × Install Week)</p>
+
+  <div class="dpt-flow">
+    <span class="dpt-flow-step" style="background:rgba(59,130,246,0.1);color:#60a5fa">Feature Store</span>
+    <span class="dpt-flow-arrow">→</span>
+    <span class="dpt-flow-step" style="background:rgba(168,85,247,0.1);color:#c084fc">pLTV Model</span>
+    <span class="dpt-flow-arrow">+</span>
+    <span class="dpt-flow-step" style="background:rgba(251,191,36,0.1);color:#fbbf24">Business Rules</span>
+    <span class="dpt-flow-arrow">=</span>
+    <span class="dpt-flow-step" style="background:rgba(34,197,94,0.1);color:#4ade80">Bid Decision</span>
+  </div>
+
+  <div class="dpt-table-wrap">
+    <table class="dpt-table">
+      <thead><tr>
+        <th>Cohort</th><th>Channel</th><th>Country</th>
+        <th class="group-model">pLTV D30</th><th class="group-model">pLTV D180</th><th class="group-model">Top-Payer Prob</th><th class="group-model">Churn Risk</th>
+        <th class="group-rule">tROAS Target</th><th class="group-rule">Max CPI</th>
+        <th class="group-output">Bid Mult.</th><th class="group-output">Est. ROAS</th><th class="group-output">Action</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="cohort-name">Google / VN / Jan W1</td><td>Google UAC</td><td>🇻🇳 VN</td>
+          <td class="score score-high">$4.20</td><td class="score score-high">$12.80</td><td class="score score-high">18.3%</td><td class="score score-low">12%</td>
+          <td class="score">150%</td><td class="score">$2.50</td>
+          <td class="score score-high">1.8×</td><td class="score score-high">210%</td><td><span class="dpt-action scale">⬆ SCALE</span></td>
+        </tr>
+        <tr>
+          <td class="cohort-name">Meta / TH / Jan W1</td><td>Meta Ads</td><td>🇹🇭 TH</td>
+          <td class="score score-mid">$2.10</td><td class="score score-mid">$5.40</td><td class="score score-mid">8.1%</td><td class="score score-mid">28%</td>
+          <td class="score">150%</td><td class="score">$1.80</td>
+          <td class="score score-mid">1.0×</td><td class="score score-mid">145%</td><td><span class="dpt-action hold">⏸ HOLD</span></td>
+        </tr>
+        <tr>
+          <td class="cohort-name">TikTok / ID / Jan W1</td><td>TikTok Ads</td><td>🇮🇩 ID</td>
+          <td class="score score-low">$0.80</td><td class="score score-low">$1.90</td><td class="score score-low">2.4%</td><td class="score score-high">45%</td>
+          <td class="score">150%</td><td class="score">$1.20</td>
+          <td class="score score-low">0.5×</td><td class="score score-low">85%</td><td><span class="dpt-action reduce">⬇ REDUCE</span></td>
+        </tr>
+        <tr>
+          <td class="cohort-name">Unity / PH / Jan W1</td><td>Unity Ads</td><td>🇵🇭 PH</td>
+          <td class="score score-low">$0.30</td><td class="score score-low">$0.60</td><td class="score score-low">0.8%</td><td class="score score-high">62%</td>
+          <td class="score">150%</td><td class="score">$0.80</td>
+          <td class="score score-low">0.0×</td><td class="score score-low">38%</td><td><span class="dpt-action kill">✕ KILL</span></td>
+        </tr>
+        <tr>
+          <td class="cohort-name">Apple SA / VN / Jan W1</td><td>Apple Search</td><td>🇻🇳 VN</td>
+          <td class="score score-high">$5.60</td><td class="score score-high">$16.20</td><td class="score score-high">24.5%</td><td class="score score-low">8%</td>
+          <td class="score">150%</td><td class="score">$3.00</td>
+          <td class="score score-high">2.2×</td><td class="score score-high">285%</td><td><span class="dpt-action scale">⬆ SCALE</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="dpt-legend" style="margin-top:12px">
+    <div class="dpt-legend-item"><div class="dpt-legend-dot" style="background:#c084fc"></div> Model Scores</div>
+    <div class="dpt-legend-item"><div class="dpt-legend-dot" style="background:#fbbf24"></div> Business Rules</div>
+    <div class="dpt-legend-item"><div class="dpt-legend-dot" style="background:#4ade80"></div> Decision Output</div>
+  </div>
+
+  <div class="dpt-anatomy" style="margin-top:16px">
+    <div class="dpt-anatomy-card">
+      <h4 style="color:#c084fc">🧠 Model Scores</h4>
+      <ul>
+        <li><code>pLTV_d30</code> — Expected revenue by day 30</li>
+        <li><code>pLTV_d180</code> — Expected revenue by day 180</li>
+        <li><code>top_payer_prob</code> — Top X% payer probability</li>
+        <li><code>churn_risk_d14</code> — 14-day churn probability</li>
+      </ul>
+    </div>
+    <div class="dpt-anatomy-card">
+      <h4 style="color:#fbbf24">📐 Business Rules</h4>
+      <ul>
+        <li><code>tROAS_target</code> — Min acceptable ROAS</li>
+        <li><code>max_cpi_cap</code> — Max cost-per-install</li>
+        <li>Budget tier constraints per channel</li>
+        <li>Country-level priority overrides</li>
+      </ul>
+    </div>
+    <div class="dpt-anatomy-card">
+      <h4 style="color:#4ade80">🚀 Decision Output</h4>
+      <ul>
+        <li><code>bid_multiplier</code> = pLTV ÷ CPI ÷ tROAS</li>
+        <li><code>est_roas</code> — Projected ROAS</li>
+        <li><code>action</code> — SCALE / HOLD / REDUCE / KILL</li>
+        <li>Pushed to ad network APIs</li>
+      </ul>
+    </div>
+  </div>
+</div>`;
+
+// ─── Feature importance data ───
+const FI_DATA = [
+  { name: 'revenue_d7', value: 100, color: '#ef4444' },
+  { name: 'night_play_ratio', value: 18, color: '#60a5fa' },
+  { name: 'hard_currency_earned_w7d', value: 9, color: '#fbbf24' },
+  { name: 'hard_currency_spent_w7d', value: 7, color: '#fbbf24' },
+  { name: 'avg_session_length_w7d', value: 6, color: '#60a5fa' },
+  { name: 'sessions_cnt_w1d', value: 5, color: '#60a5fa' },
+  { name: 'soft_currency_earned_w7d', value: 4.5, color: '#fbbf24' },
+  { name: 'quest_complete_cnt_w7d', value: 4, color: '#4ade80' },
+  { name: 'pvp_matches_w7d', value: 3.5, color: '#ef4444' },
+  { name: 'gacha_pulls_w7d', value: 3, color: '#c084fc' },
+  { name: 'guild_activity_w7d', value: 2.5, color: '#fbbf24' },
+  { name: 'dungeon_clears_w7d', value: 2, color: '#ef4444' },
+  { name: 'chat_messages_w7d', value: 1.5, color: '#c084fc' },
+  { name: 'device_tier', value: 1, color: '#71717a' },
+  { name: 'country', value: 0.8, color: '#71717a' },
+];
+
+// ─── STEPS config ───────────────────────────────────────────────────────────
+
+const STEPS = [
+  {
+    id: 0, icon: '📡', title: 'Raw Logs', desc: 'Game telemetry & event streams',
+    badge: 'INGEST', badgeColor: '#60a5fa', badgeBg: 'rgba(59,130,246,0.15)',
+    details: {
+      left: { title: 'Data Sources', items: [
+        'In-game event streams (sessions, purchases, progression)',
+        'Device & platform metadata',
+        'UA attribution logs (channel, campaign, creative)',
+        'Social interaction signals (guild, chat, PvP)',
+        'Server-side economy events',
+      ]},
+      right: { title: 'Key Properties', items: [
+        'Real-time ingestion via event pipeline',
+        'Immutable append-only log',
+        'Schema-on-read flexibility',
+        'Retention: raw logs kept for re-processing',
+        'Volume: millions of events / day per title',
+      ]},
+      pltv: 'For pLTV, early signals matter most — D1/D3/D7 engagement depth, early progression velocity, session frequency volatility, and first purchase signals form the core predictive features extracted from raw logs.'
+    },
+    extraHtml: RAW_LOGS_EXTRA,
+  },
+  {
+    id: 1, icon: '🏪', title: 'Feature Store', desc: 'Curated, versioned feature tables',
+    badge: 'TRANSFORM', badgeColor: '#4ade80', badgeBg: 'rgba(34,197,94,0.15)',
+    details: {
+      left: { title: 'Feature Engineering', items: [
+        'Aggregation windows: D1, D3, D7, D14, D30, D60, D180',
+        'Behavioral ratios (mobile %, realtime %, export rate)',
+        'Engagement velocity & frequency volatility',
+        'Revenue trajectory & ARPU curves',
+        'Social graph features (guild size, interaction depth)',
+      ]},
+      right: { title: 'Store Capabilities', items: [
+        'Point-in-time correct feature retrieval',
+        'Feature versioning & lineage tracking',
+        'Shared across all model families',
+        'Batch + real-time serving modes',
+        'Entity-level: user, cohort, campaign',
+      ]},
+      pltv: 'The Feature Store is the single source of truth — same features serve training (offline) and scoring (online). This eliminates training/serving skew, the #1 silent killer of ML models in production.'
+    },
+  },
+  {
+    id: 2, icon: '🧠', title: 'Model Scoring', desc: 'Four model families × multiple targets',
+    badge: 'PREDICT', badgeColor: '#c084fc', badgeBg: 'rgba(168,85,247,0.15)',
+    details: {
+      left: { title: 'Model Outputs', items: [
+        '💎 pLTV — Expected LTV at D30/D60/D180, top-payer probability',
+        '⚠️ Risk — Churn probability (7/14 day), survival curve, time-to-drop-off',
+        '🎁 Responsiveness — Purchase probability given discount X, revenue uplift',
+        '🎭 Role — PvP competitor, cosmetic buyer, guild leader, explorer',
+      ]},
+      right: { title: 'MLOps Layer', items: [
+        'Model registry with versioning & rollback',
+        'A/B testing between model versions',
+        'Automated retraining triggers (drift detection)',
+        'Batch scoring (nightly) + real-time scoring (API)',
+        'Model stacking: combine primitives for complex decisions',
+      ]},
+      pltv: 'pLTV scoring runs nightly for all active users. The key insight: pLTV is not just a number — it feeds UA bidding (how much to bid), retention priority (who to save), and offer sizing (how much discount is justified).'
+    },
+    extraHtml: MODEL_SCORING_EXTRA,
+  },
+  {
+    id: 3, icon: '📋', title: 'Decision Profile Table', desc: 'Per-entity scores + business rules',
+    badge: 'DECIDE', badgeColor: '#fbbf24', badgeBg: 'rgba(251,191,36,0.15)',
+    details: {
+      left: { title: 'Profile Contents', items: [
+        'All 4 model scores per user (Value, Risk, Responsiveness, Role)',
+        'Business rule overlays (VIP thresholds, budget caps)',
+        'Segment assignments & holdout flags',
+        'A/B experiment group allocation',
+        'Score confidence intervals & last-updated timestamps',
+      ]},
+      right: { title: 'Decision Logic', items: [
+        'Flexibly combine scores: e.g. high-value + high-risk → retention priority',
+        'Rule engine for ops teams (no code deploys needed)',
+        'Holdout group management for uplift measurement',
+        'Campaign eligibility checks',
+        'Budget allocation & bid multiplier computation',
+      ]},
+      pltv: 'The Decision Profile Table is where ML meets business. For "UA1: How much to bid for this cohort?" — it combines pLTV score with channel ROAS projection to output a concrete bid multiplier. Ops teams set rules; models provide the scores.'
+    },
+    extraHtml: DPT_EXTRA,
+  },
+  {
+    id: 4, icon: '🚀', title: 'Activation Connectors', desc: 'Push decisions to execution platforms',
+    badge: 'ACTIVATE', badgeColor: '#f87171', badgeBg: 'rgba(239,68,68,0.15)',
+    details: {
+      left: { title: 'Activation Channels', items: [
+        'Ad networks — feed pLTV for Value Optimization bidding',
+        'CRM / Push / SMS — retention campaigns, re-engagement',
+        'In-game triggers — personalized offers, dynamic bundles',
+        'LiveOps dashboard — real-time decision monitoring',
+        'BI reporting — attribution & uplift measurement',
+      ]},
+      right: { title: 'Key Use Cases', items: [
+        'UA: Adjust tROAS targets & bid multipliers per cohort',
+        'LiveOps: Dynamic offer engine with personalized bundles',
+        'Retention: Auto-trigger interventions for high-risk players',
+        'VIP: Identify & nurture next-gen high-value players',
+        'Revenue: Discount optimization without over-discounting',
+      ]},
+      pltv: 'Activation is where data becomes measurable action. The pLTV score flows to ads platforms for bid optimization, while churn risk triggers push notifications — all continuously measured via holdout groups and uplift analysis.'
+    },
+  }
+];
+
+const pipeline = document.getElementById('pipeline');
+const detailPanel = document.getElementById('detail-panel');
+let activeStep = 0;
+
+function renderPipeline() {
+  pipeline.innerHTML = '';
+  STEPS.forEach((step, i) => {
+    if (i > 0) {
+      const arrow = document.createElement('div');
+      arrow.className = 'arrow' + (i <= activeStep ? ' lit' : '');
+      arrow.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
+      pipeline.appendChild(arrow);
+    }
+    const div = document.createElement('div');
+    div.className = `step step-${i}` + (i === activeStep ? ' active' : '');
+    div.innerHTML = `
+      <div class="step-card">
+        <span class="step-number">STEP ${i + 1}</span>
+        <div class="step-icon">${step.icon}</div>
+        <div class="step-title">${step.title}</div>
+        <div class="step-desc">${step.desc}</div>
+      </div>
+    `;
+    div.addEventListener('click', () => {
+      activeStep = i;
+      renderPipeline();
+      renderDetail();
+    });
+    pipeline.appendChild(div);
+  });
+}
+
+function renderDetail() {
+  const step = STEPS[activeStep];
+  const colorClass = ['color-blue','color-green','color-purple','color-amber','color-red'][activeStep];
+
+  detailPanel.style.animation = 'none';
+  detailPanel.offsetHeight;
+  detailPanel.style.animation = 'fadeIn 0.3s ease';
+
+  detailPanel.innerHTML = `
+    <div class="detail-header">
+      <span style="font-size:28px">${step.icon}</span>
+      <h2 style="color:${step.badgeColor}">${step.title}</h2>
+      <span class="badge" style="color:${step.badgeColor};background:${step.badgeBg}">${step.badge}</span>
+    </div>
+    <div class="detail-body">
+      <div class="detail-section ${colorClass}">
+        <h3>${step.details.left.title}</h3>
+        <ul>${step.details.left.items.map(item => '<li>' + item + '</li>').join('')}</ul>
+      </div>
+      <div class="detail-section ${colorClass}">
+        <h3>${step.details.right.title}</h3>
+        <ul>${step.details.right.items.map(item => '<li>' + item + '</li>').join('')}</ul>
+      </div>
+      <div class="pltv-callout">
+        <h4>💎 pLTV Playbook</h4>
+        <p>${step.details.pltv}</p>
+      </div>
+      ${step.extraHtml || ''}
+    </div>
+  `;
+
+  // Render feature importance bars if on Model Scoring step
+  if (activeStep === 2) {
+    const container = document.getElementById('fi-bars');
+    if (container) {
+      container.innerHTML = FI_DATA.map(f => `
+        <div class="fi-bar-row">
+          <span class="fi-bar-label">${f.name}</span>
+          <div class="fi-bar-track">
+            <div class="fi-bar-fill" style="width:${f.value}%;background:${f.color}"></div>
+          </div>
+          <span class="fi-bar-val">${f.value}%</span>
+        </div>
+      `).join('');
+    }
+  }
+}
+
+renderPipeline();
+renderDetail();
+</script>
+</body>
+</html>
