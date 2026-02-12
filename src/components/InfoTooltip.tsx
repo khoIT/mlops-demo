@@ -101,14 +101,14 @@ export function InfoBanner({
     >
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold ${style.titleColor} hover:bg-zinc-900/50 transition-colors`}
+        className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold ${style.titleColor} hover:bg-zinc-900/50 transition-colors`}
       >
         {style.icon}
         {title}
-        <span className="ml-auto text-zinc-600 text-[10px]">{collapsed ? "show" : "hide"}</span>
+        <span className="ml-auto text-zinc-600 text-[12px]">{collapsed ? "show" : "hide"}</span>
       </button>
       {!collapsed && (
-        <div className="px-3 pb-3 text-[11px] text-zinc-400 leading-relaxed">
+        <div className="px-3 pb-3 text-[13px] text-zinc-400 leading-relaxed">
           {children}
         </div>
       )}

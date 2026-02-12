@@ -282,13 +282,17 @@ export default function Home() {
       ) : activePlaybook === "pltv" ? (
         /* ─── pLTV Pipeline ─── */
         <>
-          <div className="max-w-[1600px] mx-auto px-6 pt-4">
-            <button
-              onClick={() => setActivePlaybook(null)}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors mb-3 flex items-center gap-1"
-            >
-              ← Back to Playbook Selection
-            </button>
+          <div className="max-w-[1600px] mx-auto px-6 py-4 space-y-3">
+            <div className="flex items-center gap-3 mb-1">
+              <button
+                onClick={() => setActivePlaybook(null)}
+                className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
+              >
+                ← Playbooks
+              </button>
+              <span className="text-zinc-700">|</span>
+              <span className="text-sm font-semibold text-emerald-400">pLTV Pipeline</span>
+            </div>
           </div>
           <main className="max-w-[1600px] mx-auto px-6 pb-12">
             <PLTVPipeline />
@@ -297,13 +301,17 @@ export default function Home() {
       ) : activePlaybook === "persona" ? (
         /* ─── Persona Pipeline (standalone) ─── */
         <>
-          <div className="max-w-[1600px] mx-auto px-6 pt-4">
-            <button
-              onClick={() => setActivePlaybook(null)}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors mb-3 flex items-center gap-1"
-            >
-              ← Back to Playbook Selection
-            </button>
+          <div className="max-w-[1600px] mx-auto px-6 py-4 space-y-3">
+            <div className="flex items-center gap-3 mb-1">
+              <button
+                onClick={() => setActivePlaybook(null)}
+                className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
+              >
+                ← Playbooks
+              </button>
+              <span className="text-zinc-700">|</span>
+              <span className="text-sm font-semibold text-purple-400">Unsupervised Learning</span>
+            </div>
           </div>
           <main className="max-w-[1600px] mx-auto px-6 pb-12">
             <PersonaPipeline rawLogs={rawLogs} onDataUpload={handleDataUpload} />
