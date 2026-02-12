@@ -9,6 +9,7 @@ import {
   TrainingResult,
   ExperimentRun,
   PipelineStep,
+  Playbook,
 } from "@/lib/types";
 import { parseRawLogs, computeUserFeatures, DEFAULT_FEATURES, restoreModel } from "@/lib/ml-engine";
 import StepIndicator from "@/components/StepIndicator";
@@ -17,9 +18,10 @@ import FeatureTraining from "@/components/FeatureTraining";
 import ModelTesting from "@/components/ModelTesting";
 import ExploratoryDataDiscovery from "@/components/ExploratoryDataDiscovery";
 import PersonaPipeline from "@/components/PersonaPipeline";
+import PLTVPipeline from "@/components/PLTVPipeline";
 import LearnPage from "@/components/LearnPage";
 import { InfoBanner } from "@/components/InfoTooltip";
-import { Database, Cpu, GitBranch, BookOpen } from "lucide-react";
+import { Database, Cpu, GitBranch, BookOpen, FlaskConical, Users, Swords, ChevronRight } from "lucide-react";
 
 export default function Home() {
   const [currentStep, setCurrentStep] = useState<PipelineStep>("data_explorer");
@@ -46,6 +48,7 @@ export default function Home() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [showLearn, setShowLearn] = useState(false);
+  const [activePlaybook, setActivePlaybook] = useState<Playbook | null>(null);
 
   // Persist experiments to localStorage
   useEffect(() => {
@@ -189,46 +192,144 @@ export default function Home() {
         <main className="max-w-[1600px] mx-auto px-6 py-6 pb-12">
           <LearnPage onBack={() => setShowLearn(false)} />
         </main>
-      ) : (
+      ) : !activePlaybook ? (
+        /* ─── Playbook Selector ─── */
+        <main className="max-w-[1600px] mx-auto px-6 py-8">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold text-zinc-100 mb-2">Choose a Playbook</h2>
+            <p className="text-sm text-zinc-500">Each playbook is a complete end-to-end ML workflow with different goals, data, and techniques.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-6 max-w-[1200px] mx-auto">
+            {/* Supervised Learning */}
+            <button
+              onClick={() => { setActivePlaybook("supervised"); setCurrentStep("data_explorer"); }}
+              className="group text-left bg-zinc-900 border border-zinc-800 rounded-xl p-6 hover:border-blue-500/40 hover:bg-blue-500/5 transition-all"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-blue-600/20 flex items-center justify-center">
+                  <FlaskConical size={20} className="text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-zinc-100 group-hover:text-blue-400 transition-colors">Supervised Learning</h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Classification</span>
+                </div>
+              </div>
+              <p className="text-xs text-zinc-400 mb-4">Predict binary outcomes from user behavior. Train on labeled data, evaluate with accuracy, precision, recall, F1.</p>
+              <div className="space-y-1.5 text-[10px] text-zinc-500">
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-blue-400" />Data Explorer → Feature Store</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-blue-400" />EDA → Feature Selection</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-blue-400" />Logistic Regression / Decision Tree</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-blue-400" />Model Registry → Live Testing</div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-zinc-800">
+                <span className="text-[10px] text-zinc-600">Use case: &quot;Is this user a power user?&quot; &quot;Will they export?&quot;</span>
+              </div>
+            </button>
+
+            {/* Persona Pipeline */}
+            <button
+              onClick={() => { setActivePlaybook("persona"); setCurrentStep("persona_pipeline"); }}
+              className="group text-left bg-zinc-900 border border-zinc-800 rounded-xl p-6 hover:border-purple-500/40 hover:bg-purple-500/5 transition-all"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-purple-600/20 flex items-center justify-center">
+                  <Users size={20} className="text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-zinc-100 group-hover:text-purple-400 transition-colors">Persona Pipeline</h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400">Unsupervised / K-Means</span>
+                </div>
+              </div>
+              <p className="text-xs text-zinc-400 mb-4">Discover user personas from behavioral patterns. No labels needed — the algorithm finds structure on its own.</p>
+              <div className="space-y-1.5 text-[10px] text-zinc-500">
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-purple-400" />Raw Logs → Clean → Aggregate</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-purple-400" />Feature Selection + Log-Transforms</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-purple-400" />K-Means Clustering + Elbow/Silhouette</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-purple-400" />Persona → Onboarding Mapping</div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-zinc-800">
+                <span className="text-[10px] text-zinc-600">Use case: &quot;Who is this user? What onboarding do they need?&quot;</span>
+              </div>
+            </button>
+
+            {/* pLTV Pipeline */}
+            <button
+              onClick={() => setActivePlaybook("pltv")}
+              className="group text-left bg-zinc-900 border border-zinc-800 rounded-xl p-6 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-emerald-600/20 flex items-center justify-center">
+                  <Swords size={20} className="text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">pLTV Pipeline</h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Game / MMORPG</span>
+                </div>
+              </div>
+              <p className="text-xs text-zinc-400 mb-4">Predict player lifetime value for Lineage 2-style MMORPGs. Full end-to-end from telemetry to ad platform integration.</p>
+              <div className="space-y-1.5 text-[10px] text-zinc-500">
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-emerald-400" />Bronze → Silver → Gold (Feature Store)</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-emerald-400" />6 Feature Blocks (Session/Progression/Economy/Social/Monetization/UA)</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-emerald-400" />GBT Model → Decile Scoring → Audiences</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-emerald-400" />Ad Platform Push → ROAS → Closed-Loop</div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-zinc-800">
+                <span className="text-[10px] text-zinc-600">Use case: &quot;Predict D60 LTV at D7 → optimize UA spend&quot;</span>
+              </div>
+            </button>
+          </div>
+        </main>
+      ) : activePlaybook === "pltv" ? (
+        /* ─── pLTV Pipeline ─── */
         <>
-      {/* ─── Pipeline Steps ─── */}
+          <div className="max-w-[1600px] mx-auto px-6 pt-4">
+            <button
+              onClick={() => setActivePlaybook(null)}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors mb-3 flex items-center gap-1"
+            >
+              ← Back to Playbook Selection
+            </button>
+          </div>
+          <main className="max-w-[1600px] mx-auto px-6 pb-12">
+            <PLTVPipeline />
+          </main>
+        </>
+      ) : activePlaybook === "persona" ? (
+        /* ─── Persona Pipeline (standalone) ─── */
+        <>
+          <div className="max-w-[1600px] mx-auto px-6 pt-4">
+            <button
+              onClick={() => setActivePlaybook(null)}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors mb-3 flex items-center gap-1"
+            >
+              ← Back to Playbook Selection
+            </button>
+          </div>
+          <main className="max-w-[1600px] mx-auto px-6 pb-12">
+            <PersonaPipeline rawLogs={rawLogs} onDataUpload={handleDataUpload} />
+          </main>
+        </>
+      ) : (
+        /* ─── Supervised Learning Pipeline ─── */
+        <>
       <div className="max-w-[1600px] mx-auto px-6 py-4 space-y-3">
+        <div className="flex items-center gap-3 mb-1">
+          <button
+            onClick={() => setActivePlaybook(null)}
+            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
+          >
+            ← Playbooks
+          </button>
+          <span className="text-zinc-700">|</span>
+          <span className="text-xs text-zinc-400">Supervised Learning</span>
+        </div>
         <StepIndicator
           currentStep={currentStep}
           onStepChange={setCurrentStep}
           hasModel={!!activeModel}
         />
-        {/* Workflow comparison banner */}
-        <InfoBanner title="Two ML Workflows — What's the difference?" variant="info">
-          <div className="grid grid-cols-2 gap-4 mt-1">
-            <div>
-              <div className="font-semibold text-blue-400 mb-1">Experiments (Tabs 1-3): Supervised Learning</div>
-              <ul className="space-y-0.5 text-zinc-500">
-                <li>- You pick a <strong className="text-zinc-300">target variable</strong> with known labels (e.g. is_power_user)</li>
-                <li>- The model learns from labeled examples (Logistic Regression / Decision Tree)</li>
-                <li>- Output: a class prediction + probability</li>
-                <li>- Evaluated with accuracy, precision, recall, F1, confusion matrix</li>
-                <li>- Use case: &quot;predict any binary outcome from user behavior&quot;</li>
-              </ul>
-            </div>
-            <div>
-              <div className="font-semibold text-purple-400 mb-1">Persona Pipeline (Tab 4): Unsupervised Learning</div>
-              <ul className="space-y-0.5 text-zinc-500">
-                <li>- <strong className="text-zinc-300">No labels needed</strong> — the algorithm discovers structure on its own</li>
-                <li>- K-Means clustering groups users by behavioral similarity</li>
-                <li>- Output: a persona assignment + onboarding recommendation</li>
-                <li>- Evaluated with inertia, centroid profiles, cluster separation</li>
-                <li>- Use case: &quot;who is this user → what onboarding to show them&quot;</li>
-              </ul>
-            </div>
-          </div>
-          <div className="mt-2 pt-2 border-t border-zinc-800 text-zinc-500">
-            <strong className="text-zinc-300">Key insight:</strong> ML isn&apos;t always about prediction accuracy. Sometimes the value is in <strong className="text-zinc-300">discovering structure</strong> you didn&apos;t know existed and <strong className="text-zinc-300">automating a product decision</strong> based on it.
-          </div>
-        </InfoBanner>
       </div>
 
-      {/* ─── Main Content ─── */}
       <main className="max-w-[1600px] mx-auto px-6 pb-12">
         {currentStep === "data_explorer" && (
           <DataExplorer
@@ -265,10 +366,6 @@ export default function Home() {
             experiments={experiments}
             onModelChange={handleModelReady}
           />
-        )}
-
-        {currentStep === "persona_pipeline" && (
-          <PersonaPipeline rawLogs={rawLogs} onDataUpload={handleDataUpload} />
         )}
       </main>
         </>

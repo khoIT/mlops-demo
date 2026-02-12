@@ -1,7 +1,7 @@
 "use client";
 
 import { PipelineStep } from "@/lib/types";
-import { Database, Search, FlaskConical, Play, Users } from "lucide-react";
+import { Database, Search, FlaskConical, Play } from "lucide-react";
 
 const STEPS: { id: PipelineStep; label: string; icon: React.ReactNode; description: string }[] = [
   {
@@ -28,12 +28,6 @@ const STEPS: { id: PipelineStep; label: string; icon: React.ReactNode; descripti
     icon: <Play size={18} />,
     description: "Test & deploy models",
   },
-  {
-    id: "persona_pipeline",
-    label: "Persona Pipeline",
-    icon: <Users size={18} />,
-    description: "Discover personas → onboarding",
-  },
 ];
 
 interface StepIndicatorProps {
@@ -56,9 +50,7 @@ export default function StepIndicator({ currentStep, onStepChange, hasModel }: S
               disabled={isDisabled}
               className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-all w-full ${
                 isActive
-                  ? step.id === "persona_pipeline"
-                    ? "bg-purple-600/20 border border-purple-500/40 text-purple-400"
-                    : "bg-blue-600/20 border border-blue-500/40 text-blue-400"
+                  ? "bg-blue-600/20 border border-blue-500/40 text-blue-400"
                   : isDisabled
                   ? "text-zinc-600 cursor-not-allowed"
                   : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
@@ -67,9 +59,7 @@ export default function StepIndicator({ currentStep, onStepChange, hasModel }: S
               <div
                 className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold shrink-0 ${
                   isActive
-                    ? step.id === "persona_pipeline"
-                      ? "bg-purple-600 text-white"
-                      : "bg-blue-600 text-white"
+                    ? "bg-blue-600 text-white"
                     : "bg-zinc-700 text-zinc-400"
                 }`}
               >

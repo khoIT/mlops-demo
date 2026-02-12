@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "MLOps Studio",
   description: "Interactive MLOps pipeline for feature engineering, model training, and prediction",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

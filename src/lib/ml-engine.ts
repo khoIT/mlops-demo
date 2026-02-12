@@ -915,28 +915,65 @@ export function predict(input: PredictionInput): PredictionResult | null {
 
 export const PERSONA_FEATURE_NAMES = [
   "total_events_30d",
-  "realtime_ratio",
-  "dashboards_viewed",
-  "games_touched",
+  "unique_dashboards_viewed",
   "mobile_ratio",
-  "avg_active_hour",
+  "realtime_ratio",
+  "repeat_view_ratio",
+  "games_touched",
+  "navigation_entropy",
+  "active_hour_std",
 ];
 
 export interface PersonaFeatureMeta {
   name: string;
   label: string;
-  type: "count" | "ratio" | "time";
+  type: "count" | "ratio" | "entropy" | "std";
   recommendLog: boolean;
   description: string;
+  sql: string;
 }
 
 export const PERSONA_FEATURE_META: PersonaFeatureMeta[] = [
-  { name: "total_events_30d", label: "Total Events", type: "count", recommendLog: true, description: "Raw event count — heavy-tail, power users dominate. Log-transform recommended." },
-  { name: "realtime_ratio", label: "Realtime Ratio", type: "ratio", recommendLog: false, description: "Fraction of realtime events. Already 0–1, no transform needed." },
-  { name: "dashboards_viewed", label: "Dashboards Viewed", type: "count", recommendLog: true, description: "Unique dashboard count — skewed. Log-transform recommended." },
-  { name: "games_touched", label: "Games Touched", type: "count", recommendLog: true, description: "Unique game/tableau count — skewed. Log-transform recommended." },
-  { name: "mobile_ratio", label: "Mobile Ratio", type: "ratio", recommendLog: false, description: "Fraction of mobile events. Already 0–1, no transform needed." },
-  { name: "avg_active_hour", label: "Avg Active Hour", type: "time", recommendLog: false, description: "Average hour of activity (0–23). Circular — 23 and 1 are close." },
+  {
+    name: "total_events_30d", label: "Total Events (30d)", type: "count", recommendLog: true,
+    description: "Raw event count per user over 30 days. Heavy-tail distribution — power users dominate. Log-transform recommended.",
+    sql: "SELECT user_id, COUNT(*) AS total_events_30d\nFROM events\nWHERE timestamp >= CURRENT_DATE - INTERVAL '30 days'\nGROUP BY user_id",
+  },
+  {
+    name: "unique_dashboards_viewed", label: "Unique Dashboards Viewed", type: "count", recommendLog: true,
+    description: "Count of distinct dashboards a user viewed. Measures breadth of exploration. Skewed — log-transform recommended.",
+    sql: "SELECT user_id,\n  COUNT(DISTINCT resource_name) AS unique_dashboards_viewed\nFROM events\nWHERE resource_type IN ('dashboard','realtime')\n  AND timestamp >= CURRENT_DATE - INTERVAL '30 days'\nGROUP BY user_id",
+  },
+  {
+    name: "mobile_ratio", label: "Mobile Ratio", type: "ratio", recommendLog: false,
+    description: "Fraction of events from mobile devices. Already 0–1, no transform needed. High values indicate mobile-first users.",
+    sql: "SELECT user_id,\n  SUM(CASE WHEN device_type = 'mobile' THEN 1 ELSE 0 END)::FLOAT\n    / COUNT(*) AS mobile_ratio\nFROM events\nWHERE timestamp >= CURRENT_DATE - INTERVAL '30 days'\nGROUP BY user_id",
+  },
+  {
+    name: "realtime_ratio", label: "Realtime Dashboard Ratio", type: "ratio", recommendLog: false,
+    description: "Fraction of views on realtime dashboards — special dashboards game operators use to monitor live game health. Already 0–1.",
+    sql: "SELECT user_id,\n  SUM(CASE WHEN resource_type = 'realtime' THEN 1 ELSE 0 END)::FLOAT\n    / COUNT(*) AS realtime_ratio\nFROM events\nWHERE timestamp >= CURRENT_DATE - INTERVAL '30 days'\nGROUP BY user_id",
+  },
+  {
+    name: "repeat_view_ratio", label: "Repeat View Ratio", type: "ratio", recommendLog: false,
+    description: "Ratio of repeated dashboard visits to total sessions. High values indicate users who monitor the same dashboards repeatedly (e.g., LiveOps operators).",
+    sql: "SELECT user_id,\n  1.0 - (COUNT(DISTINCT resource_name)::FLOAT / COUNT(*))\n    AS repeat_view_ratio\nFROM events\nWHERE timestamp >= CURRENT_DATE - INTERVAL '30 days'\nGROUP BY user_id",
+  },
+  {
+    name: "games_touched", label: "Games Touched", type: "count", recommendLog: true,
+    description: "Number of unique games/titles the user interacted with. Measures cross-game exploration. Skewed — log-transform recommended.",
+    sql: "SELECT user_id,\n  COUNT(DISTINCT resource_name) AS games_touched\nFROM events\nWHERE resource_type IN ('game','tableau')\n  AND timestamp >= CURRENT_DATE - INTERVAL '30 days'\nGROUP BY user_id",
+  },
+  {
+    name: "navigation_entropy", label: "Navigation Entropy", type: "entropy", recommendLog: false,
+    description: "Shannon entropy of dashboard visit distribution. High entropy = random/exploratory navigation. Low entropy = focused/repetitive pattern. Range depends on unique dashboards.",
+    sql: "-- Shannon entropy: H = -Σ p(x) * log2(p(x))\nWITH visit_probs AS (\n  SELECT user_id, resource_name,\n    COUNT(*)::FLOAT / SUM(COUNT(*)) OVER (PARTITION BY user_id) AS p\n  FROM events\n  WHERE timestamp >= CURRENT_DATE - INTERVAL '30 days'\n  GROUP BY user_id, resource_name\n)\nSELECT user_id,\n  -SUM(p * LOG(2, p)) AS navigation_entropy\nFROM visit_probs\nGROUP BY user_id",
+  },
+  {
+    name: "active_hour_std", label: "Active Hour Std Dev", type: "std", recommendLog: false,
+    description: "Standard deviation of the hour-of-day when user is active. Low std = consistent schedule (e.g., daily 9am checks). High std = irregular activity patterns.",
+    sql: "SELECT user_id,\n  STDDEV(EXTRACT(HOUR FROM timestamp)) AS active_hour_std\nFROM events\nWHERE timestamp >= CURRENT_DATE - INTERVAL '30 days'\nGROUP BY user_id",
+  },
 ];
 
 export interface ClusterConfig {
@@ -973,35 +1010,64 @@ export function aggregateToPersonaFeatures(
   const rows: PersonaFeatureRow[] = [];
   for (const [userId, logs] of userMap) {
     const totalEvents = logs.length;
-    const realtimeEvents = logs.filter(
-      (l) => l.resource_type === "realtime"
-    ).length;
-    const dashboardNames = new Set(logs.map((l) => l.resource_name));
-    const gameFolders = new Set(
+
+    // unique_dashboards_viewed: distinct dashboard/realtime resource names
+    const dashboardNames = new Set(
       logs
-        .filter(
-          (l) => l.resource_type === "game" || l.resource_type === "tableau"
-        )
+        .filter((l) => l.resource_type === "dashboard" || l.resource_type === "realtime")
         .map((l) => l.resource_name)
     );
+
+    // mobile_ratio: fraction of mobile events
     const mobileEvents = logs.filter((l) => l.device === "mobile").length;
+
+    // realtime_ratio: fraction of realtime dashboard views
+    const realtimeEvents = logs.filter((l) => l.resource_type === "realtime").length;
+
+    // repeat_view_ratio: 1 - (unique resources / total events)
+    const uniqueResources = new Set(logs.map((l) => l.resource_name)).size;
+    const repeatViewRatio = totalEvents > 1
+      ? Math.round((1 - uniqueResources / totalEvents) * 1000) / 1000
+      : 0;
+
+    // games_touched: distinct game/tableau resource names
+    const gameFolders = new Set(
+      logs
+        .filter((l) => l.resource_type === "game" || l.resource_type === "tableau")
+        .map((l) => l.resource_name)
+    );
+
+    // navigation_entropy: Shannon entropy of resource visit distribution
+    const resourceCounts = new Map<string, number>();
+    for (const log of logs) {
+      resourceCounts.set(log.resource_name, (resourceCounts.get(log.resource_name) || 0) + 1);
+    }
+    let entropy = 0;
+    for (const count of resourceCounts.values()) {
+      const p = count / totalEvents;
+      if (p > 0) entropy -= p * Math.log2(p);
+    }
+
+    // active_hour_std: standard deviation of activity hours
     const hours = logs.map((l) => l.hour);
-    const avgHour =
-      hours.length > 0
-        ? Math.round((hours.reduce((a, b) => a + b, 0) / hours.length) * 10) /
-          10
-        : 12;
+    const meanHour = hours.length > 0
+      ? hours.reduce((a, b) => a + b, 0) / hours.length
+      : 12;
+    const hourVariance = hours.length > 1
+      ? hours.reduce((a, h) => a + (h - meanHour) ** 2, 0) / hours.length
+      : 0;
+    const hourStd = Math.sqrt(hourVariance);
 
     rows.push({
       user_id: userId,
       total_events_30d: totalEvents,
-      realtime_ratio:
-        Math.round((realtimeEvents / totalEvents) * 1000) / 1000,
-      dashboards_viewed: dashboardNames.size,
+      unique_dashboards_viewed: dashboardNames.size,
+      mobile_ratio: Math.round((mobileEvents / totalEvents) * 1000) / 1000,
+      realtime_ratio: Math.round((realtimeEvents / totalEvents) * 1000) / 1000,
+      repeat_view_ratio: repeatViewRatio,
       games_touched: gameFolders.size,
-      mobile_ratio:
-        Math.round((mobileEvents / totalEvents) * 1000) / 1000,
-      avg_active_hour: avgHour,
+      navigation_entropy: Math.round(entropy * 1000) / 1000,
+      active_hour_std: Math.round(hourStd * 100) / 100,
     });
   }
   return rows;
@@ -1103,16 +1169,377 @@ function kMeans(
   return { centroids, labels, inertia: Math.round(inertia * 100) / 100, iterations };
 }
 
-const DEFAULT_PERSONAS: Omit<PersonaDefinition, "id">[] = [
+// ─── Model Validation & Diagnosis Engine ──────────────────────────────────────
+
+export interface ExperimentRun {
+  id: number;
+  k: number;
+  features: string[];
+  logTransforms: string[];
+  silhouette: number;
+  inertia: number;
+  iterations: number;
+  clusterSizes: number[];
+  timestamp: number;
+}
+
+export interface FeatureImportanceResult {
+  feature: string;
+  label: string;
+  baselineSilhouette: number;
+  silhouetteWithout: number;
+  delta: number; // positive = feature helps (removing it hurts)
+  verdict: "critical" | "helpful" | "neutral" | "harmful";
+}
+
+export interface ClusterProfile {
+  clusterId: number;
+  suggestedName: string;
+  description: string;
+  dominantFeatures: { feature: string; value: number; level: "high" | "low" | "medium" }[];
+  userCount: number;
+  percentOfTotal: number;
+}
+
+export interface FeatureComboSuggestion {
+  features: string[];
+  logTransforms: string[];
+  silhouette: number;
+  delta: number; // vs current
+  reason: string;
+}
+
+export interface ModelDiagnosis {
+  overallQuality: "good" | "weak" | "poor";
+  silhouette: number;
+  bestK: number;
+  bestKSilhouette: number;
+  isKOptimal: boolean;
+  allKWeak: boolean;
+  featureImportance: FeatureImportanceResult[];
+  suggestedCombos: FeatureComboSuggestion[];
+  clusterProfiles: ClusterProfile[];
+  recommendations: { action: string; type: "k" | "feature" | "algo" | "accept"; priority: "high" | "medium" | "low" }[];
+}
+
+/** Fast silhouette: run K-Means with given features, return silhouette score */
+function quickSilhouette(
+  personaFeatures: PersonaFeatureRow[],
+  k: number,
+  features: string[],
+  logTransforms: string[]
+): number {
+  if (features.length < 2) return -1;
+  const logSet = new Set(logTransforms);
+  const X = personaFeatures.map((row) =>
+    features.map((f) => {
+      const val = (row as unknown as Record<string, number>)[f] || 0;
+      return logSet.has(f) ? Math.log1p(val) : val;
+    })
+  );
+  const { normalized } = normalize(X);
+  // Single run for speed
+  const { labels } = kMeans(normalized, k, 30);
+  const n = normalized.length;
+  let silTotal = 0;
+  for (let i = 0; i < n; i++) {
+    const ci = labels[i];
+    const sameCluster = normalized.filter((_, j) => j !== i && labels[j] === ci);
+    const a = sameCluster.length > 0
+      ? sameCluster.reduce((sum, p) => sum + euclideanDistance(normalized[i], p), 0) / sameCluster.length
+      : 0;
+    let b = Infinity;
+    for (let c = 0; c < k; c++) {
+      if (c === ci) continue;
+      const other = normalized.filter((_, j) => labels[j] === c);
+      if (other.length === 0) continue;
+      const md = other.reduce((sum, p) => sum + euclideanDistance(normalized[i], p), 0) / other.length;
+      b = Math.min(b, md);
+    }
+    if (b === Infinity) b = 0;
+    silTotal += Math.max(a, b) > 0 ? (b - a) / Math.max(a, b) : 0;
+  }
+  return Math.round((silTotal / n) * 1000) / 1000;
+}
+
+/** Analyze each feature's contribution by leave-one-out silhouette comparison */
+export function analyzeFeatureImportance(
+  personaFeatures: PersonaFeatureRow[],
+  k: number,
+  currentFeatures: string[],
+  logTransforms: string[]
+): FeatureImportanceResult[] {
+  if (currentFeatures.length <= 2) return []; // can't leave-one-out with only 2
+
+  const baseline = quickSilhouette(personaFeatures, k, currentFeatures, logTransforms);
+
+  // Also test adding features not currently selected
+  const allFeatures = PERSONA_FEATURE_NAMES;
+  const notSelected = allFeatures.filter((f) => !currentFeatures.includes(f));
+
+  const results: FeatureImportanceResult[] = [];
+
+  // Leave-one-out for selected features
+  for (const feat of currentFeatures) {
+    const without = currentFeatures.filter((f) => f !== feat);
+    const silWithout = quickSilhouette(personaFeatures, k, without, logTransforms);
+    const delta = baseline - silWithout; // positive = removing hurts = feature helps
+    const meta = PERSONA_FEATURE_META.find((m) => m.name === feat);
+    let verdict: FeatureImportanceResult["verdict"] = "neutral";
+    if (delta > 0.05) verdict = "critical";
+    else if (delta > 0.01) verdict = "helpful";
+    else if (delta < -0.03) verdict = "harmful";
+    results.push({
+      feature: feat,
+      label: meta?.label || feat,
+      baselineSilhouette: baseline,
+      silhouetteWithout: silWithout,
+      delta,
+      verdict,
+    });
+  }
+
+  // Add-one-in for unselected features
+  for (const feat of notSelected) {
+    const withFeat = [...currentFeatures, feat];
+    const recLog = PERSONA_FEATURE_META.find((m) => m.name === feat)?.recommendLog
+      ? [...logTransforms, feat] : logTransforms;
+    const silWith = quickSilhouette(personaFeatures, k, withFeat, recLog);
+    const delta = silWith - baseline; // positive = adding helps
+    const meta = PERSONA_FEATURE_META.find((m) => m.name === feat);
+    let verdict: FeatureImportanceResult["verdict"] = "neutral";
+    if (delta > 0.05) verdict = "critical";
+    else if (delta > 0.01) verdict = "helpful";
+    else if (delta < -0.03) verdict = "harmful";
+    results.push({
+      feature: feat,
+      label: meta?.label || feat,
+      baselineSilhouette: baseline,
+      silhouetteWithout: silWith, // repurpose: silhouette when added
+      delta,
+      verdict,
+    });
+  }
+
+  // Sort: critical first, then by absolute delta
+  results.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  return results;
+}
+
+/** Auto-interpret cluster centroids into business-readable profiles */
+export function interpretClusterProfiles(
+  result: ClusteringResult
+): ClusterProfile[] {
+  const totalUsers = result.assignments.length;
+  return result.personas.map((persona) => {
+    const centroid = result.centroids[persona.id];
+    const userCount = result.assignments.filter((a) => a.persona_id === persona.id).length;
+
+    // Classify each feature as high/medium/low relative to other centroids
+    const dominantFeatures = result.featureNames.map((feat, fi) => {
+      const val = centroid?.[fi] ?? 0;
+      const allVals = result.centroids.map((c) => c[fi]);
+      const maxVal = Math.max(...allVals);
+      const minVal = Math.min(...allVals);
+      const range = maxVal - minVal;
+      let level: "high" | "low" | "medium" = "medium";
+      if (range > 0) {
+        const normalized = (val - minVal) / range;
+        if (normalized > 0.7) level = "high";
+        else if (normalized < 0.3) level = "low";
+      }
+      return { feature: feat, value: val, level };
+    });
+
+    // Generate description from dominant features
+    const highs = dominantFeatures.filter((d) => d.level === "high").map((d) => d.feature.replace(/_/g, " "));
+    const lows = dominantFeatures.filter((d) => d.level === "low").map((d) => d.feature.replace(/_/g, " "));
+    let description = "";
+    if (highs.length > 0) description += `High ${highs.join(", ")}`;
+    if (highs.length > 0 && lows.length > 0) description += "; ";
+    if (lows.length > 0) description += `Low ${lows.join(", ")}`;
+    if (!description) description = "Average across all features";
+
+    return {
+      clusterId: persona.id,
+      suggestedName: persona.name,
+      description,
+      dominantFeatures,
+      userCount,
+      percentOfTotal: Math.round((userCount / totalUsers) * 100),
+    };
+  });
+}
+
+/** Suggest alternative feature combos to try */
+export function suggestFeatureCombos(
+  personaFeatures: PersonaFeatureRow[],
+  k: number,
+  currentFeatures: string[],
+  logTransforms: string[]
+): FeatureComboSuggestion[] {
+  const baseline = quickSilhouette(personaFeatures, k, currentFeatures, logTransforms);
+  const suggestions: FeatureComboSuggestion[] = [];
+
+  // Strategy 1: Try with all features
+  if (currentFeatures.length < PERSONA_FEATURE_NAMES.length) {
+    const allLog = PERSONA_FEATURE_META.filter((m) => m.recommendLog).map((m) => m.name);
+    const sil = quickSilhouette(personaFeatures, k, [...PERSONA_FEATURE_NAMES], allLog);
+    suggestions.push({
+      features: [...PERSONA_FEATURE_NAMES],
+      logTransforms: allLog,
+      silhouette: sil,
+      delta: sil - baseline,
+      reason: "All features — maximum information",
+    });
+  }
+
+  // Strategy 2: Ratios-only (no count features)
+  const ratioFeatures = PERSONA_FEATURE_META.filter((m) => m.type === "ratio" || m.type === "entropy" || m.type === "std").map((m) => m.name);
+  if (ratioFeatures.length >= 2 && JSON.stringify(ratioFeatures.sort()) !== JSON.stringify([...currentFeatures].sort())) {
+    const sil = quickSilhouette(personaFeatures, k, ratioFeatures, []);
+    suggestions.push({
+      features: ratioFeatures,
+      logTransforms: [],
+      silhouette: sil,
+      delta: sil - baseline,
+      reason: "Ratios + entropy + std only — removes count-dominated variance",
+    });
+  }
+
+  // Strategy 3: Behavioral focus (realtime, repeat, entropy, hour_std)
+  const behavioral = ["realtime_ratio", "repeat_view_ratio", "navigation_entropy", "active_hour_std", "mobile_ratio"]
+    .filter((f) => PERSONA_FEATURE_NAMES.includes(f));
+  if (behavioral.length >= 2 && JSON.stringify(behavioral.sort()) !== JSON.stringify([...currentFeatures].sort())) {
+    const sil = quickSilhouette(personaFeatures, k, behavioral, []);
+    suggestions.push({
+      features: behavioral,
+      logTransforms: [],
+      silhouette: sil,
+      delta: sil - baseline,
+      reason: "Behavioral signals only — focused on usage patterns, not volume",
+    });
+  }
+
+  // Strategy 4: Volume + diversity (events, dashboards, games)
+  const volume = ["total_events_30d", "unique_dashboards_viewed", "games_touched"]
+    .filter((f) => PERSONA_FEATURE_NAMES.includes(f));
+  if (volume.length >= 2 && JSON.stringify(volume.sort()) !== JSON.stringify([...currentFeatures].sort())) {
+    const volLog = PERSONA_FEATURE_META.filter((m) => volume.includes(m.name) && m.recommendLog).map((m) => m.name);
+    const sil = quickSilhouette(personaFeatures, k, volume, volLog);
+    suggestions.push({
+      features: volume,
+      logTransforms: volLog,
+      silhouette: sil,
+      delta: sil - baseline,
+      reason: "Volume & diversity only — separates power users from casual",
+    });
+  }
+
+  // Sort by silhouette descending
+  suggestions.sort((a, b) => b.silhouette - a.silhouette);
+  return suggestions;
+}
+
+/** Full model diagnosis: combines all analyses into actionable recommendations */
+export function diagnoseModel(
+  personaFeatures: PersonaFeatureRow[],
+  result: ClusteringResult,
+  elbowData: { k: number; silhouette: number; inertia: number }[],
+  currentFeatures: string[],
+  logTransforms: string[]
+): ModelDiagnosis {
+  const currentElbow = elbowData.find((e) => e.k === result.k);
+  const sil = currentElbow?.silhouette ?? 0;
+  const bestKEntry = elbowData.reduce((best, e) => e.silhouette > best.silhouette ? e : best, elbowData[0]);
+  const allKWeak = elbowData.every((e) => e.silhouette < 0.5);
+
+  const overallQuality: ModelDiagnosis["overallQuality"] =
+    sil >= 0.5 ? "good" : sil >= 0.25 ? "weak" : "poor";
+
+  const featureImportance = analyzeFeatureImportance(personaFeatures, result.k, currentFeatures, logTransforms);
+  const suggestedCombos = suggestFeatureCombos(personaFeatures, result.k, currentFeatures, logTransforms);
+  const clusterProfiles = interpretClusterProfiles(result);
+
+  // Build recommendations
+  const recommendations: ModelDiagnosis["recommendations"] = [];
+
+  if (bestKEntry.k !== result.k && bestKEntry.silhouette > sil + 0.02) {
+    recommendations.push({
+      action: `Switch to K=${bestKEntry.k} (silhouette ${bestKEntry.silhouette} vs current ${sil})`,
+      type: "k",
+      priority: "high",
+    });
+  }
+
+  const harmful = featureImportance.filter((f) => f.verdict === "harmful" && currentFeatures.includes(f.feature));
+  for (const h of harmful) {
+    recommendations.push({
+      action: `Drop ${h.label} — removing it improves silhouette by ${Math.abs(h.delta).toFixed(3)}`,
+      type: "feature",
+      priority: "high",
+    });
+  }
+
+  const helpful = featureImportance.filter((f) => (f.verdict === "critical" || f.verdict === "helpful") && !currentFeatures.includes(f.feature));
+  for (const h of helpful) {
+    recommendations.push({
+      action: `Add ${h.label} — expected to improve silhouette by ${h.delta.toFixed(3)}`,
+      type: "feature",
+      priority: h.verdict === "critical" ? "high" : "medium",
+    });
+  }
+
+  const bestCombo = suggestedCombos.find((c) => c.silhouette > sil + 0.02);
+  if (bestCombo) {
+    recommendations.push({
+      action: `Try "${bestCombo.reason}" combo (expected silhouette ${bestCombo.silhouette})`,
+      type: "feature",
+      priority: "medium",
+    });
+  }
+
+  if (allKWeak) {
+    recommendations.push({
+      action: "Consider soft clustering (GMM) — no K produces strong clusters with current features",
+      type: "algo",
+      priority: "medium",
+    });
+  }
+
+  if (overallQuality === "good" || (overallQuality === "weak" && recommendations.length === 0)) {
+    recommendations.push({
+      action: "Proceed to cluster interpretation — inspect centroid profiles and map to business personas",
+      type: "accept",
+      priority: overallQuality === "good" ? "high" : "medium",
+    });
+  }
+
+  return {
+    overallQuality,
+    silhouette: sil,
+    bestK: bestKEntry.k,
+    bestKSilhouette: bestKEntry.silhouette,
+    isKOptimal: bestKEntry.k === result.k,
+    allKWeak,
+    featureImportance,
+    suggestedCombos,
+    clusterProfiles,
+    recommendations,
+  };
+}
+
+export const DEFAULT_PERSONAS: Omit<PersonaDefinition, "id">[] = [
   {
     name: "New / Casual User",
     color: "#f59e0b",
     icon: "sun",
     definingSignals: [
-      "Low total_events",
-      "Low dashboard diversity",
-      "Higher mobile_ratio",
-      "Home-heavy usage",
+      "Low total_events_30d — minimal platform activity",
+      "Low unique_dashboards_viewed — hasn't explored",
+      "High mobile_ratio — mobile-first access pattern",
+      "Low navigation_entropy — visits only 1–2 resources",
+      "High active_hour_std — irregular usage schedule",
     ],
     onboardingType: "guided_basic",
     onboardingTitle: "Welcome! Start with 1 dashboard",
@@ -1128,10 +1555,11 @@ const DEFAULT_PERSONAS: Omit<PersonaDefinition, "id">[] = [
     color: "#22c55e",
     icon: "activity",
     definingSignals: [
-      "realtime_ratio close to 1.0",
-      "Repeated same dashboard visits",
-      "Consistent active hours",
-      "Laptop-focused usage",
+      "High realtime_ratio — focused on live game dashboards",
+      "High repeat_view_ratio — monitors same dashboards repeatedly",
+      "Low active_hour_std — consistent daily schedule",
+      "Low games_touched — focused on specific game(s)",
+      "Low navigation_entropy — repetitive, focused pattern",
     ],
     onboardingType: "skip_tutorial_realtime",
     onboardingTitle: "Realtime dashboards updated every 60s",
@@ -1147,10 +1575,11 @@ const DEFAULT_PERSONAS: Omit<PersonaDefinition, "id">[] = [
     color: "#3b82f6",
     icon: "compass",
     definingSignals: [
-      "Many dashboards_viewed",
-      "Multiple games_touched",
-      "Structured navigation patterns",
-      "Low mobile_ratio",
+      "High unique_dashboards_viewed — broad exploration",
+      "High games_touched — cross-game analysis",
+      "High navigation_entropy — varied, exploratory navigation",
+      "Low mobile_ratio — desktop/laptop power user",
+      "Low repeat_view_ratio — rarely revisits same view",
     ],
     onboardingType: "advanced_shortcuts",
     onboardingTitle: "Explore cross-game performance dashboards",
@@ -1172,29 +1601,40 @@ function interpretClusters(
   const assignments = new Array(k).fill(-1);
   const used = new Set<number>();
 
+  // Helper to safely read a feature value (0 if feature not selected)
+  const f = (featureMap: Record<string, number>, name: string) => featureMap[name] ?? 0;
+
   // Score each centroid against each persona template
   const scores: number[][] = centroids.map((centroid) => {
     const featureMap: Record<string, number> = {};
-    featureNames.forEach((f, i) => (featureMap[f] = centroid[i]));
+    featureNames.forEach((feat, i) => (featureMap[feat] = centroid[i]));
 
-    // Score for "New / Casual" (persona 0): low events, high mobile, low diversity
+    // Score for "New / Casual" (persona 0):
+    // low events, low dashboards, high mobile, low entropy, high hour_std
     const casualScore =
-      (1 / (1 + featureMap["total_events_30d"])) * 2 +
-      featureMap["mobile_ratio"] * 3 +
-      (1 / (1 + featureMap["dashboards_viewed"])) * 2 +
-      (1 / (1 + featureMap["games_touched"])) * 1;
+      (1 / (1 + f(featureMap, "total_events_30d"))) * 2 +
+      (1 / (1 + f(featureMap, "unique_dashboards_viewed"))) * 2 +
+      f(featureMap, "mobile_ratio") * 3 +
+      (1 / (1 + f(featureMap, "navigation_entropy"))) * 1.5 +
+      f(featureMap, "active_hour_std") * 0.5;
 
-    // Score for "LiveOps Monitor" (persona 1): high realtime, low diversity
+    // Score for "LiveOps Monitor" (persona 1):
+    // high realtime, high repeat_view, low hour_std, low games, low entropy
     const liveopsScore =
-      featureMap["realtime_ratio"] * 5 +
-      (1 / (1 + featureMap["games_touched"])) * 1;
+      f(featureMap, "realtime_ratio") * 4 +
+      f(featureMap, "repeat_view_ratio") * 3 +
+      (1 / (1 + f(featureMap, "active_hour_std"))) * 2 +
+      (1 / (1 + f(featureMap, "games_touched"))) * 1 +
+      (1 / (1 + f(featureMap, "navigation_entropy"))) * 1;
 
-    // Score for "Exploratory Analyst" (persona 2): many dashboards, many games, low mobile
+    // Score for "Exploratory Analyst" (persona 2):
+    // high dashboards, high games, high entropy, low mobile, low repeat_view
     const analystScore =
-      featureMap["dashboards_viewed"] * 2 +
-      featureMap["games_touched"] * 2 +
-      featureMap["total_events_30d"] * 0.5 +
-      (1 - featureMap["mobile_ratio"]) * 1;
+      f(featureMap, "unique_dashboards_viewed") * 2 +
+      f(featureMap, "games_touched") * 2 +
+      f(featureMap, "navigation_entropy") * 2 +
+      (1 - f(featureMap, "mobile_ratio")) * 1.5 +
+      (1 - f(featureMap, "repeat_view_ratio")) * 1;
 
     return [casualScore, liveopsScore, analystScore];
   });

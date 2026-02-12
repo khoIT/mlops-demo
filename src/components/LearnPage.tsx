@@ -43,6 +43,7 @@ type Section =
   | "overview"
   | "supervised"
   | "unsupervised"
+  | "pltv"
   | "feature_engineering"
   | "evaluation"
   | "production"
@@ -53,7 +54,8 @@ type Section =
 const SECTIONS: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <BookOpen size={16} /> },
   { id: "supervised", label: "Supervised Pipeline", icon: <FlaskConical size={16} /> },
-  { id: "unsupervised", label: "Unsupervised Pipeline", icon: <Users size={16} /> },
+  { id: "unsupervised", label: "Persona Pipeline", icon: <Users size={16} /> },
+  { id: "pltv", label: "pLTV Pipeline", icon: <Target size={16} /> },
   { id: "feature_engineering", label: "Feature Engineering IRL", icon: <Wrench size={16} /> },
   { id: "evaluation", label: "Evaluation & Testing", icon: <Target size={16} /> },
   { id: "production", label: "Production & Monitoring", icon: <Rocket size={16} /> },
@@ -162,9 +164,9 @@ export default function LearnPage({ onBack }: LearnPageProps) {
             <>
               <SectionCard title="What This App Demonstrates" color="blue">
                 <p>
-                  This is an <strong className="text-zinc-200">interactive MLOps demo</strong> that
-                  shows the complete lifecycle of two different ML approaches, both starting from the
-                  same raw analytics logs.
+                  This is an <strong className="text-zinc-200">interactive MLOps demo</strong> with
+                  three complete playbooks — each showing a different ML approach with its own data,
+                  pipeline, and business use case.
                 </p>
                 <p>
                   The goal isn&apos;t just to train a model — it&apos;s to show every step of data
@@ -173,15 +175,16 @@ export default function LearnPage({ onBack }: LearnPageProps) {
                 </p>
               </SectionCard>
 
-              <SectionCard title="Two Approaches, Same Data" color="purple">
-                <div className="grid grid-cols-2 gap-4">
+              <SectionCard title="Three Playbooks" color="purple">
+                <div className="grid grid-cols-3 gap-4">
                   <div className="bg-zinc-800/50 rounded-lg p-4 border border-blue-500/20">
                     <div className="flex items-center gap-2 mb-2">
                       <FlaskConical size={16} className="text-blue-400" />
                       <span className="font-semibold text-blue-300">
-                        Supervised Learning (Tabs 1-3)
+                        Supervised Learning
                       </span>
                     </div>
+                    <div className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 w-fit mb-2">Classification</div>
                     <ul className="space-y-1 text-xs text-zinc-500">
                       <li className="flex items-start gap-1.5">
                         <ChevronRight size={10} className="text-blue-400 mt-0.5 shrink-0" />
@@ -206,9 +209,10 @@ export default function LearnPage({ onBack }: LearnPageProps) {
                     <div className="flex items-center gap-2 mb-2">
                       <Users size={16} className="text-purple-400" />
                       <span className="font-semibold text-purple-300">
-                        Unsupervised Learning (Tab 4)
+                        Persona Pipeline
                       </span>
                     </div>
+                    <div className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 w-fit mb-2">Unsupervised / K-Means</div>
                     <ul className="space-y-1 text-xs text-zinc-500">
                       <li className="flex items-start gap-1.5">
                         <ChevronRight size={10} className="text-purple-400 mt-0.5 shrink-0" />
@@ -229,6 +233,34 @@ export default function LearnPage({ onBack }: LearnPageProps) {
                       </li>
                     </ul>
                   </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-4 border border-emerald-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Target size={16} className="text-emerald-400" />
+                      <span className="font-semibold text-emerald-300">
+                        pLTV Pipeline
+                      </span>
+                    </div>
+                    <div className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 w-fit mb-2">Game / MMORPG</div>
+                    <ul className="space-y-1 text-xs text-zinc-500">
+                      <li className="flex items-start gap-1.5">
+                        <ChevronRight size={10} className="text-emerald-400 mt-0.5 shrink-0" />
+                        Predict <strong className="text-zinc-300">player lifetime value</strong> from
+                        game telemetry
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <ChevronRight size={10} className="text-emerald-400 mt-0.5 shrink-0" />
+                        Bronze → Silver → Gold medallion architecture
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <ChevronRight size={10} className="text-emerald-400 mt-0.5 shrink-0" />
+                        Output: LTV decile score → ad platform audience push
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <ChevronRight size={10} className="text-emerald-400 mt-0.5 shrink-0" />
+                        Use case: &quot;predict D60 LTV at D7 → optimize UA spend&quot;
+                      </li>
+                    </ul>
+                  </div>
                 </div>
                 <div className="bg-zinc-800/50 rounded-lg p-3 mt-2 border border-zinc-700">
                   <div className="flex items-start gap-2">
@@ -236,14 +268,15 @@ export default function LearnPage({ onBack }: LearnPageProps) {
                     <p className="text-xs text-zinc-400">
                       <strong className="text-zinc-300">Key insight:</strong> ML isn&apos;t always
                       about prediction accuracy. Sometimes the value is in discovering structure you
-                      didn&apos;t know existed and automating a product decision based on it.
+                      didn&apos;t know existed, and sometimes it&apos;s about predicting business
+                      outcomes to optimize spending. Each playbook demonstrates a different real-world pattern.
                     </p>
                   </div>
                 </div>
               </SectionCard>
 
               <SectionCard title="The Data Pipeline Pattern" color="green">
-                <p>Both workflows follow the same fundamental pattern:</p>
+                <p>All three playbooks follow the same fundamental pattern:</p>
                 <div className="flex items-center gap-2 mt-2 text-xs flex-wrap">
                   {[
                     { label: "Raw Events", icon: <Database size={12} /> },
@@ -485,6 +518,96 @@ export default function LearnPage({ onBack }: LearnPageProps) {
             </>
           )}
 
+          {/* ═══════════════════ pLTV PIPELINE ═══════════════════ */}
+          {activeSection === "pltv" && (
+            <>
+              <SectionCard title="pLTV Pipeline — Predict Player Lifetime Value" color="green">
+                <p>
+                  This playbook demonstrates an <strong className="text-zinc-200">end-to-end game analytics pipeline</strong> for
+                  predicting player lifetime value (pLTV) in an MMORPG context (Lineage 2-style).
+                  The goal: predict a player&apos;s D60 spending at D7 so you can optimize user acquisition spend in real time.
+                </p>
+              </SectionCard>
+
+              <SectionCard title="Pipeline Steps" color="cyan">
+                <div className="space-y-4">
+                  {[
+                    { n: "1", title: "Ingest & Clean (Bronze → Silver)", color: "amber", desc: "Raw game telemetry (players, events, payments CSVs) is ingested and cleaned. This includes deduplication of events, quarantining late/future-dated records, schema validation, identity mapping, and revenue cleaning. The cleaning report shows exactly what was removed and why." },
+                    { n: "2", title: "Unify & Enrich (Silver → Gold)", color: "blue", desc: "Cleaned data is joined across tables (players + events + payments) using player_id as the entity key. Time windows are applied (D0-D7 observation, D8-D60 label). This is where point-in-time correctness matters most — features must only use data from the observation window." },
+                    { n: "3", title: "Compute Feature Store", color: "cyan", desc: "Six feature blocks are computed: Session & Engagement, Progression & Content, Economy & Inventory, Social & Guild, Monetization, and UA & Channel. Each block contains multiple features with inline statistics (min, max, mean, std). Features are searchable and filterable." },
+                    { n: "4", title: "Build Training Dataset", color: "green", desc: "Select target variable (e.g. total_spend_d60), configure train/validation/test splits with visual ratio bar, set maturity filter (minimum days since install), and run leakage detection. The dataset builder checks for timestamp leakage, target leakage, and high-cardinality leakage." },
+                    { n: "5", title: "Train & Score", color: "purple", desc: "Train a GBT model, produce decile scores (D1-D10), and generate audience segments for ad platform integration. The closed-loop connects predictions back to UA spend optimization and ROAS measurement." },
+                  ].map((step) => (
+                    <div key={step.n} className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-700">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          step.color === "amber" ? "bg-amber-500/15 text-amber-400" :
+                          step.color === "blue" ? "bg-blue-500/15 text-blue-400" :
+                          step.color === "cyan" ? "bg-cyan-500/15 text-cyan-400" :
+                          step.color === "green" ? "bg-green-500/15 text-green-400" :
+                          "bg-purple-500/15 text-purple-400"
+                        }`}>{step.n}</div>
+                        <h4 className="text-xs font-bold text-zinc-200">{step.title}</h4>
+                      </div>
+                      <p className="text-[11px] text-zinc-500">{step.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Key Concepts in pLTV" color="amber">
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { name: "Medallion Architecture", desc: "Bronze (raw) → Silver (cleaned) → Gold (enriched). Each layer adds quality and structure. This is the standard pattern in Databricks and modern data lakes." },
+                    { name: "Feature Blocks", desc: "Features are organized into logical groups (Session, Progression, Economy, Social, Monetization, UA). This makes them discoverable and maintainable at scale." },
+                    { name: "Observation Window", desc: "D0-D7: the period from which features are computed. Only data from this window is used for prediction. Using data beyond D7 would be leakage." },
+                    { name: "Label Window", desc: "D8-D60: the period that defines the target variable. total_spend_d60 is the actual spending in this window — what we want to predict." },
+                    { name: "Leakage Detection", desc: "Automated checks for timestamp leakage (features computed from future data), target leakage (features that directly encode the label), and high-cardinality leakage." },
+                    { name: "Decile Scoring", desc: "Players are ranked into 10 buckets (D1-D10) based on predicted LTV. Top deciles get higher UA bids, bottom deciles get suppressed — directly optimizing ad spend." },
+                  ].map((c) => (
+                    <div key={c.name} className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
+                      <div className="text-xs font-semibold text-zinc-300 mb-1">{c.name}</div>
+                      <div className="text-[11px] text-zinc-500">{c.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+
+              <SectionCard title="pLTV vs Other Playbooks" color="purple">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-zinc-800">
+                        <th className="text-left py-2 pr-4 text-zinc-400 font-semibold w-40"></th>
+                        <th className="text-left py-2 pr-4 text-blue-400 font-semibold">Supervised</th>
+                        <th className="text-left py-2 pr-4 text-purple-400 font-semibold">Persona</th>
+                        <th className="text-left py-2 text-emerald-400 font-semibold">pLTV</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/50">
+                      {[
+                        { q: "Data source", s: "Analytics click logs", p: "Analytics click logs", l: "Game telemetry (3 CSVs)" },
+                        { q: "Has labels?", s: "Yes (target variable)", p: "No (unsupervised)", l: "Yes (D60 spend)" },
+                        { q: "Model type", s: "Logistic Regression / Decision Tree", p: "K-Means Clustering", l: "Gradient Boosted Trees" },
+                        { q: "Output", s: "Class prediction", p: "Persona assignment", l: "LTV decile score" },
+                        { q: "Business action", s: "Flag power users", p: "Personalize onboarding", l: "Optimize UA ad spend" },
+                        { q: "Data cleaning", s: "Basic feature store", p: "Log cleaning + aggregation", l: "Full medallion pipeline with dedup, quarantine, schema validation" },
+                        { q: "Feature count", s: "~12 features", p: "6 features", l: "40+ features in 6 blocks" },
+                      ].map((r) => (
+                        <tr key={r.q}>
+                          <td className="py-2 pr-4 text-zinc-300 font-medium">{r.q}</td>
+                          <td className="py-2 pr-4 text-zinc-500">{r.s}</td>
+                          <td className="py-2 pr-4 text-zinc-500">{r.p}</td>
+                          <td className="py-2 text-zinc-500">{r.l}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </SectionCard>
+            </>
+          )}
+
           {/* ═══════════════════ FEATURE ENGINEERING IRL ═══════════════════ */}
           {activeSection === "feature_engineering" && (
             <>
@@ -589,7 +712,7 @@ export default function LearnPage({ onBack }: LearnPageProps) {
                         <Users size={12} />
                         In this app: Unsupervised
                       </div>
-                      <div className="text-[11px] text-zinc-500">Persona features like <code className="text-purple-300">realtime_ratio</code>, <code className="text-purple-300">mobile_ratio</code>, <code className="text-purple-300">avg_active_hour</code> use the same raw data but are aggregated differently for clustering.</div>
+                      <div className="text-[11px] text-zinc-500">Persona features like <code className="text-purple-300">realtime_ratio</code>, <code className="text-purple-300">repeat_view_ratio</code>, <code className="text-purple-300">navigation_entropy</code> use the same raw data but are aggregated differently for clustering.</div>
                     </div>
                   </div>
                 </div>
