@@ -10,7 +10,10 @@ import {
   UACost,
   PLTVFeatureRow,
   PLTVModelResult,
+  ModelCategory,
+  DecisionProblem,
 } from "@/lib/types";
+import DecisionDataLab from "@/components/DecisionDataLab";
 import {
   generateGameData,
   computePLTVFeatures,
@@ -31,6 +34,15 @@ import {
   RawCSVPayment,
 } from "@/lib/pltv-engine";
 import InfoTooltip, { InfoBanner } from "@/components/InfoTooltip";
+import {
+  type StrategyId, type StrategyDef, type ComparisonResult, type ComparisonInsights,
+  getStrategyDefs, runComparison, summarizeInsights, getPresetKValues, ensureLtv90,
+  computeOfflineAnalysis,
+  type OfflineAnalysisResult,
+  simulateActivation,
+  type ActivationConfig,
+  type ActivationResult,
+} from "@/lib/strategy-comparator";
 import {
   ArrowRight,
   ArrowLeft,
@@ -56,6 +68,14 @@ import {
   Server,
   Clock,
   Hash,
+  Settings,
+  Crosshair,
+  HelpCircle,
+  DollarSign,
+  ShieldAlert,
+  Gem,
+  Gamepad2,
+  Compass,
 } from "lucide-react";
 import {
   LineChart,
@@ -81,18 +101,63 @@ import {
 // ─── Step definitions ────────────────────────────────────────────────────────
 
 const PLTV_STEPS: { label: string; description: string; icon: React.ReactNode }[] = [
-  { label: "Instrumentation", description: "Event spec & governance", icon: <Shield size={14} /> },
   { label: "Raw Ingestion", description: "Bronze layer", icon: <Database size={14} /> },
   { label: "Clean & Unify", description: "Silver layer", icon: <Sparkles size={14} /> },
   { label: "Feature Store", description: "Gold layer — 6 blocks", icon: <Layers size={14} /> },
   { label: "Training Dataset", description: "D0–D7 → predict D60", icon: <Target size={14} /> },
-  { label: "Model Training", description: "Gradient boosted trees", icon: <Brain size={14} /> },
-  { label: "Scoring", description: "Deciles & segments", icon: <Zap size={14} /> },
-  { label: "Audiences", description: "Segment builder", icon: <Users size={14} /> },
-  { label: "Ad Platforms", description: "Push & activate", icon: <Upload size={14} /> },
-  { label: "Validation", description: "Leakage & bias traps", icon: <Eye size={14} /> },
-  { label: "Closed Loop", description: "Retrain & monitor", icon: <TrendingUp size={14} /> },
+  { label: "Model Training", description: "Pick problem → train", icon: <Brain size={14} /> },
+  { label: "Strategy Comparator", description: "Evaluate LTV90", icon: <Zap size={14} /> },
+  { label: "Decisions Lab", description: "Segments → Actions", icon: <Crosshair size={14} /> },
 ];
+
+// ─── Decision Problems (11 JTBD from the game publishing context) ────────────
+
+const MODEL_CATEGORY_META: Record<ModelCategory, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
+  value:          { label: "Value",          color: "text-blue-400",   bgColor: "bg-blue-500/15 border-blue-500/30",   icon: <Gem size={12} className="text-blue-400" /> },
+  risk:           { label: "Risk",           color: "text-amber-400",  bgColor: "bg-amber-500/15 border-amber-500/30", icon: <ShieldAlert size={12} className="text-amber-400" /> },
+  responsiveness: { label: "Responsiveness", color: "text-purple-400", bgColor: "bg-purple-500/15 border-purple-500/30", icon: <Gamepad2 size={12} className="text-purple-400" /> },
+  intent:         { label: "Intent / Role",  color: "text-cyan-400",   bgColor: "bg-cyan-500/15 border-cyan-500/30",   icon: <Compass size={12} className="text-cyan-400" /> },
+};
+
+const DECISION_PROBLEMS: DecisionProblem[] = [
+  // UA
+  { id: "UA1", category: "UA", shortLabel: "Bid Optimization", question: "How much should we bid for this cohort?", modelFamily: ["value"], coreFeatures: ["D1/D3/D7 engagement depth", "Early progression velocity", "Session frequency volatility", "Early purchase signals", "UA channel / creative", "Country/device", "Social interaction signals"], activationUsecases: ["Feed pLTV to ads network for Value Optimization", "Adjust tROAS targets", "Adjust bid multiplier"] },
+  { id: "UA2", category: "UA", shortLabel: "Channel Budget", question: "Which channel deserves more budget?", modelFamily: ["value", "risk"], coreFeatures: ["Channel tag", "Campaign objective", "Creative type", "Early retention (RR1, RR3)", "Early ARPU trajectory", "Payment conversion delay"], activationUsecases: ["Channel's expected ROAS projection", "Budget reallocation table", "Kill / scale decision matrix"] },
+  { id: "UA3", category: "UA", shortLabel: "Campaign Kill", question: "Should we kill this campaign?", modelFamily: ["value", "risk"], coreFeatures: ["CPI vs expected LTV", "Early payer rate", "Early churn risk", "Engagement depth", "Cohort decay speed"], activationUsecases: ["Auto-alert when campaign risk > threshold", "Suggested kill / monitor flag"] },
+  // LiveOps
+  { id: "LO1", category: "LiveOps", shortLabel: "Offer Targeting", question: "Who should receive what offer?", modelFamily: ["responsiveness", "value"], coreFeatures: ["Purchase cadence", "Historical discount responsiveness", "Price ladder progression", "Currency accumulation pattern", "Inventory depletion rate"], activationUsecases: ["Dynamic offer engine", "Personalized bundle recommendation", "Discount targeting rules"] },
+  { id: "LO2", category: "LiveOps", shortLabel: "Push/SMS", question: "Who should get push/SMS?", modelFamily: ["risk"], coreFeatures: ["Session drop trend", "Login gap", "Engagement depth decline", "Guild detachment", "Event inactivity"], activationUsecases: ["CleverTap audience auto-sync", "Risk-tier-based messaging"] },
+  { id: "LO3", category: "LiveOps", shortLabel: "Event Boost", question: "Who should get event reward boost?", modelFamily: ["responsiveness"], coreFeatures: ["Past event participation", "Progression bottleneck signals", "Frustration indicators", "Competitive ranking drop"], activationUsecases: ["Engagement Lift Potential scoring", "Targeted event reward multiplier"] },
+  { id: "LO4", category: "LiveOps", shortLabel: "Churn Prevention", question: "Who needs churn prevention?", modelFamily: ["risk"], coreFeatures: ["Session variance", "Drop in PvP activity", "Drop in guild interaction", "Time since last milestone", "Purchase pause"], activationUsecases: ["Retention package trigger", "Free bonus currency", "Personalized encouragement"] },
+  { id: "LO5", category: "LiveOps", shortLabel: "VIP Program", question: "Who should be invited to VIP program?", modelFamily: ["value"], coreFeatures: ["Early high ARPPU signal", "Rapid price ladder climb", "Competitive ranking", "Social dominance behavior", "Payment frequency acceleration"], activationUsecases: ["VIP invite trigger", "Dedicated CS routing", "Exclusive event access"] },
+  // Intent
+  { id: "INT1", category: "LiveOps", shortLabel: "Spend Routing", question: "Which shop surface / bundle should this player see first?", modelFamily: ["intent"], coreFeatures: ["Spend category share", "Purchase frequency & recency", "Basket composition", "Screen views by category", "Gacha preview clicks", "Inventory pressure", "Grind fatigue signals"], activationUsecases: ["Personalize shop layout", "Category-aligned bundles", "Tailored promos", "Reduce promo spam"] },
+  { id: "INT2", category: "LiveOps", shortLabel: "Content Routing", question: "What content should we spotlight for this player?", modelFamily: ["intent"], coreFeatures: ["Level/milestone velocity", "Quest completion patterns", "Time-in-mode distribution (PvE/PvP/social)", "Session length & cadence", "Preference signals", "Social behavior"], activationUsecases: ["Personalize 'What to do next' panel", "Auto-route to best-fit game mode", "Content-specific event invites", "Adjust onboarding by intent"] },
+  { id: "INT3", category: "LiveOps", shortLabel: "Social Ignition", question: "Should we push guild/social actions, and which type?", modelFamily: ["intent"], coreFeatures: ["Invites sent/accepted", "Party join rate", "Guild browse frequency", "Chat frequency", "Co-op sessions", "Network exposure", "Play-style signals"], activationUsecases: ["Recommend best-fit guild", "Trigger 'join guild' mission + reward", "Invite to mentor program", "Route to community channels"] },
+];
+
+// ─── Target variable options per model category ──────────────────────────────
+const TARGET_VAR_OPTIONS: Record<ModelCategory, { key: string; engineTarget: "ltv_d60" | "ltv_d30"; label: string; desc: string; recommended?: boolean }[]> = {
+  value: [
+    { key: "ltv_d60", engineTarget: "ltv_d60", label: "LTV D60", desc: "Predicted revenue through day 60", recommended: true },
+    { key: "ltv_d30", engineTarget: "ltv_d30", label: "LTV D30", desc: "Predicted revenue through day 30" },
+  ],
+  risk: [
+    { key: "churn_risk_d30", engineTarget: "ltv_d60", label: "Churn Risk D30", desc: "Probability of zero revenue by D30 (inverted LTV)", recommended: true },
+    { key: "churn_risk_d7", engineTarget: "ltv_d30", label: "Churn Risk D7", desc: "Early churn signal — zero engagement by D7" },
+    { key: "ltv_d60_risk", engineTarget: "ltv_d60", label: "LTV D60 (risk-adjusted)", desc: "Revenue prediction with risk weighting" },
+  ],
+  responsiveness: [
+    { key: "conversion_d14", engineTarget: "ltv_d30", label: "Purchase Conversion D14", desc: "Likelihood of first purchase by day 14", recommended: true },
+    { key: "offer_response", engineTarget: "ltv_d60", label: "Offer Response Score", desc: "Predicted response to promotional offers" },
+    { key: "engagement_lift", engineTarget: "ltv_d60", label: "Engagement Lift Potential", desc: "Predicted engagement increase from intervention" },
+  ],
+  intent: [
+    { key: "intent_spend", engineTarget: "ltv_d60", label: "Spend Intent", desc: "Predicted spending category & depth", recommended: true },
+    { key: "intent_content", engineTarget: "ltv_d30", label: "Content Preference", desc: "Predicted preferred content/game mode" },
+    { key: "intent_social", engineTarget: "ltv_d60", label: "Social Intent", desc: "Predicted social engagement propensity" },
+  ],
+};
 
 const BLOCK_COLORS: Record<string, string> = {
   sessions: "#3b82f6",
@@ -106,7 +171,7 @@ const BLOCK_COLORS: Record<string, string> = {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function PLTVPipeline() {
-  const [activeStep, setActiveStep] = useState<PLTVStep>(0);
+  const [activeStep, setActiveStep] = useState<PLTVStep>(1);
   const [dataGenerated, setDataGenerated] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [dataSource, setDataSource] = useState<"csv" | "generated" | "uploaded" | null>(null);
@@ -204,6 +269,8 @@ export default function PLTVPipeline() {
     testSize: number;
     trainingDatasetId: number | null;
     trainingDatasetName: string;
+    problemId: string | null;
+    modelCategory: ModelCategory;
     result: PLTVModelResult;
     timestamp: number;
   }
@@ -216,6 +283,7 @@ export default function PLTVPipeline() {
     rowCount: number;
     payerRate: number;
     avgLTV: number;
+    avgLTV90: number;
     featureRows: PLTVFeatureRow[];
     dateRange: { min: string; max: string } | null;
     filters: string;
@@ -237,8 +305,30 @@ export default function PLTVPipeline() {
   // Step 5: training dataset selection
   const [trainingDatasetId, setTrainingDatasetId] = useState<number | null>(null);
 
-  // Step 6: API contract collapse
-  const [apiContractExpanded, setApiContractExpanded] = useState(false);
+  // Step 6: Strategy Comparator state
+  const [scSelectedDatasetIds, setScSelectedDatasetIds] = useState<number[]>([]);
+  const [scSelectedStrategies, setScSelectedStrategies] = useState<StrategyId[]>(["model_a", "ltv3d", "ltv7d"]);
+  const [scKMode, setScKMode] = useState<"preset" | "manual">("manual");
+  const [scManualK, setScManualK] = useState(100);
+  const [scComparisonResult, setScComparisonResult] = useState<ComparisonResult | null>(null);
+  const [scInsights, setScInsights] = useState<ComparisonInsights | null>(null);
+  const [scInsightsExpanded, setScInsightsExpanded] = useState(false);
+  const [scOffline, setScOffline] = useState<OfflineAnalysisResult | null>(null);
+  const [scActivationConfig, setScActivationConfig] = useState<ActivationConfig>({
+    topK: 500,
+    budget: 20000,
+    baseCPI: 1.6,
+    adsSensitivity: 0.6,
+  });
+  const [scActivationResult, setScActivationResult] = useState<ActivationResult | null>(null);
+
+  // Step 5: Problem selection & model category
+  const [selectedProblemId, setSelectedProblemId] = useState<string | null>(null);
+  const [selectedModelCategory, setSelectedModelCategory] = useState<ModelCategory>("value");
+  const [problemSelectorOpen, setProblemSelectorOpen] = useState(true);
+  const [selectedTargetKey, setSelectedTargetKey] = useState<string>("ltv_d60");
+
+  // Step 7: Decision Intelligence — now handled by DecisionDataLab component
 
   // ─── Auto-load CSVs from public/ on mount ────────────────────────────────
 
@@ -279,7 +369,7 @@ export default function PLTVPipeline() {
   // ─── Handlers ────────────────────────────────────────────────────────────
 
   const handleGenerateData = useCallback(() => {
-    const data = generateGameData(500);
+    const data = generateGameData();
     setPlayers(data.players);
     setEvents(data.events);
     setPayments(data.payments);
@@ -364,11 +454,13 @@ export default function PLTVPipeline() {
       testSize: modelResult.testSize,
       trainingDatasetId: trainingDatasetId,
       trainingDatasetName: trainDs?.name ?? "—",
+      problemId: selectedProblemId,
+      modelCategory: selectedModelCategory,
       result: modelResult,
       timestamp: Date.now(),
     };
     setModelRegistry((prev) => [...prev, version]);
-  }, [modelResult, modelRegistry.length, modelTrack, selectedFeatures, targetVar, useLogTarget, trainingDatasetId, datasetRegistry]);
+  }, [modelResult, modelRegistry.length, modelTrack, selectedFeatures, targetVar, useLogTarget, trainingDatasetId, datasetRegistry, selectedProblemId, selectedModelCategory]);
 
   const handleRunScoring = useCallback(() => {
     const model = modelRegistry.find((m) => m.id === scoringModelId);
@@ -392,6 +484,141 @@ export default function PLTVPipeline() {
       timestamp: Date.now(),
     });
   }, [scoringModelId, scoringDatasetId, modelRegistry, datasetRegistry, uaCosts]);
+
+  // ─── Strategy Comparator: run comparison ────────────────────────────
+  const handleRunComparison = useCallback(() => {
+    if (scSelectedDatasetIds.length === 0) return;
+    
+    // Combine all selected datasets
+    const allRows: PLTVFeatureRow[] = [];
+    const datasetNames: string[] = [];
+    let totalUsers = 0;
+    let totalLtv90 = 0;
+    
+    for (const dsId of scSelectedDatasetIds) {
+      const ds = datasetRegistry.find((d) => d.id === dsId);
+      if (!ds) continue;
+      allRows.push(...ds.featureRows);
+      datasetNames.push(ds.name);
+      totalUsers += ds.rowCount;
+      totalLtv90 += ds.avgLTV90 * ds.rowCount;
+    }
+    
+    if (allRows.length === 0) return;
+
+    // Build Model A scores: use the first saved model, or train on-the-fly
+    const modelAScores = new Map<string, number>();
+    if (modelRegistry.length > 0) {
+      // Score using the first model in registry
+      const model = modelRegistry[0];
+      const result = trainPLTVModel(allRows, model.features, {
+        testSplit: 0.0,
+        target: model.targetVar as "ltv_d60" | "ltv_d30",
+        useLogTarget: model.useLogTarget,
+        modelTrack: model.modelTrack,
+      });
+      for (const u of result.scoredUsers) {
+        modelAScores.set(u.game_user_id, u.pltv_pred);
+      }
+    } else {
+      // Fallback: train with defaults
+      const result = trainPLTVModel(allRows, [...PLTV_NUMERIC_FEATURES], {
+        testSplit: 0.0,
+        target: "ltv_d60",
+        useLogTarget: true,
+        modelTrack: "warm",
+      });
+      for (const u of result.scoredUsers) {
+        modelAScores.set(u.game_user_id, u.pltv_pred);
+      }
+    }
+
+    const allDefs = getStrategyDefs(modelAScores);
+    const selectedDefs = allDefs.filter((d) => scSelectedStrategies.includes(d.id));
+    if (selectedDefs.length === 0) return;
+
+    // K values
+    let kValues: number[];
+    if (scKMode === "preset") {
+      kValues = getPresetKValues(allRows.length).map((p) => p.k);
+    } else {
+      kValues = [Math.min(scManualK, allRows.length)];
+    }
+
+    // Use first dataset ID for compatibility, but update name to reflect multiple datasets
+    const firstDsId = scSelectedDatasetIds[0];
+    const combinedName = datasetNames.length === 1 ? datasetNames[0] : `${datasetNames.length} datasets combined`;
+    const result = runComparison(allRows, selectedDefs, kValues, firstDsId, combinedName);
+    
+    // Update result to reflect actual total users and avg LTV
+    const updatedResult = {
+      ...result,
+      totalUsers: allRows.length,
+      avgLtv90: totalUsers > 0 ? Math.round((totalLtv90 / totalUsers) * 100) / 100 : 0,
+      datasetName: combinedName
+    };
+    
+    setScComparisonResult(updatedResult);
+    const insights = summarizeInsights(updatedResult);
+    setScInsights(insights);
+
+    const offlineK = (scKMode === "manual")
+      ? Math.min(scManualK, allRows.length)
+      : (kValues.length > 0 ? kValues[Math.floor(kValues.length / 2)] : Math.min(500, allRows.length));
+    const offline = computeOfflineAnalysis(allRows, allDefs, scSelectedStrategies, offlineK);
+    setScOffline(offline);
+    setScActivationResult(null);
+  }, [scSelectedDatasetIds, scSelectedStrategies, scKMode, scManualK, datasetRegistry, modelRegistry]);
+
+  const handleSendActivation = useCallback(() => {
+    if (scSelectedDatasetIds.length === 0) return;
+    const dsId = scSelectedDatasetIds[0];
+    const ds = datasetRegistry.find((d) => d.id === dsId);
+    if (!ds) return;
+    const rows = ds.featureRows;
+    if (rows.length === 0) return;
+
+    // Rebuild defs so activation uses the exact same scores as the current comparator run
+    const modelAScores = new Map<string, number>();
+    if (modelRegistry.length > 0) {
+      const model = modelRegistry[0];
+      const result = trainPLTVModel(rows, model.features, {
+        testSplit: 0.0,
+        target: model.targetVar as "ltv_d60" | "ltv_d30",
+        useLogTarget: model.useLogTarget,
+        modelTrack: model.modelTrack,
+      });
+      for (const u of result.scoredUsers) modelAScores.set(u.game_user_id, u.pltv_pred);
+    } else {
+      const result = trainPLTVModel(rows, [...PLTV_NUMERIC_FEATURES], {
+        testSplit: 0.0,
+        target: "ltv_d60",
+        useLogTarget: true,
+        modelTrack: "warm",
+      });
+      for (const u of result.scoredUsers) modelAScores.set(u.game_user_id, u.pltv_pred);
+    }
+
+    const defs = getStrategyDefs(modelAScores);
+    const offline = scOffline ?? computeOfflineAnalysis(
+      rows,
+      defs,
+      scSelectedStrategies,
+      Math.min(typeof scActivationConfig.topK === "number" ? Math.round(scActivationConfig.topK) : 500, rows.length),
+    );
+    setScOffline(offline);
+
+    const activation = simulateActivation(rows, defs, scSelectedStrategies, scActivationConfig, offline);
+    setScActivationResult(activation);
+  }, [scSelectedDatasetIds, datasetRegistry, modelRegistry, scActivationConfig, scOffline, scSelectedStrategies]);
+
+  // Auto-select the most recent TEST dataset when entering Step 6
+  useEffect(() => {
+    if (activeStep === 6 && scSelectedDatasetIds.length === 0 && datasetRegistry.length > 0) {
+      const testDs = [...datasetRegistry].reverse().find((d) => d.splitRole === "test");
+      if (testDs) setScSelectedDatasetIds([testDs.id]);
+    }
+  }, [activeStep, datasetRegistry, scSelectedDatasetIds.length]);
 
   const toggleFeature = useCallback((name: string) => {
     setSelectedFeatures((prev) => {
@@ -512,6 +739,8 @@ export default function PLTVPipeline() {
       totalRevenue,
     };
   }, [events, players, payments]);
+
+  // Decision segment computation now handled inside DecisionDataLab component
 
   // ─── Filtered table data ───────────────────────────────────────────────
 
@@ -640,6 +869,7 @@ export default function PLTVPipeline() {
   const makeDatasetVersion = useCallback((id: number, rows: PLTVFeatureRow[], role: PLTVDatasetVersion["splitRole"], roleName: string): PLTVDatasetVersion => {
     const payers = rows.filter((r) => r.is_payer_by_d7 === 1);
     const avgLTV = rows.length > 0 ? Math.round(rows.reduce((s, r) => s + r.ltv_d60, 0) / rows.length * 100) / 100 : 0;
+    const avgLTV90 = rows.length > 0 ? Math.round(rows.reduce((s, r) => s + r.ltv_d90, 0) / rows.length * 100) / 100 : 0;
     const dates = rows.map((r) => r.install_date).sort();
     const dateRange = dates.length > 0 ? { min: dates[0], max: dates[dates.length - 1] } : null;
     const activeFilters: string[] = [];
@@ -658,6 +888,7 @@ export default function PLTVPipeline() {
       rowCount: rows.length,
       payerRate: rows.length > 0 ? Math.round((payers.length / rows.length) * 1000) / 10 : 0,
       avgLTV,
+      avgLTV90,
       featureRows: [...rows],
       dateRange,
       filters: filterStr,
@@ -716,6 +947,7 @@ export default function PLTVPipeline() {
       {/* Step navigator */}
       <div className="flex gap-0.5 bg-zinc-900 rounded-xl p-1.5 border border-zinc-800 overflow-x-auto">
         {PLTV_STEPS.map((step, idx) => {
+          idx += 1;
           const isActive = idx === activeStep;
           const stepNum = idx as PLTVStep;
           return (
@@ -738,83 +970,6 @@ export default function PLTVPipeline() {
           );
         })}
       </div>
-
-      {/* ═══ Step 0: Instrumentation & Governance ═══ */}
-      {activeStep === 0 && (
-        <div className="space-y-4">
-          <InfoBanner title="Step 0 — Instrumentation & Governance" variant="info">
-            <p>Before any ML, you need <strong>clean, joinable, consented data</strong>. This step defines what to collect and how to govern it.</p>
-          </InfoBanner>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-base font-bold text-zinc-200 mb-3 flex items-center gap-2"><Shield size={16} className="text-emerald-400" />Identity & Attribution</h4>
-              <div className="space-y-2 text-sm text-zinc-400">
-                <div className="bg-zinc-800/50 rounded p-2.5 border border-zinc-700">
-                  <div className="font-mono text-[12px] text-emerald-400 mb-1">Join Keys (required)</div>
-                  <ul className="space-y-0.5">
-                    <li className="flex items-center gap-1.5"><ChevronRight size={10} className="text-emerald-400" /><code className="text-zinc-300">game_user_id</code> — internal player ID</li>
-                    <li className="flex items-center gap-1.5"><ChevronRight size={10} className="text-emerald-400" /><code className="text-zinc-300">install_id / device_ad_id</code> — IDFA/GAID where allowed</li>
-                    <li className="flex items-center gap-1.5"><ChevronRight size={10} className="text-emerald-400" /><code className="text-zinc-300">mmp_user_id, click_id</code> — AppsFlyer/Adjust</li>
-                  </ul>
-                </div>
-                <div className="bg-zinc-800/50 rounded p-2.5 border border-zinc-700">
-                  <div className="font-mono text-[12px] text-amber-400 mb-1">Attribution Fields</div>
-                  <ul className="space-y-0.5">
-                    <li className="flex items-center gap-1.5"><ChevronRight size={10} className="text-amber-400" /><code className="text-zinc-300">install_time, campaign_id, adset_id, creative_id</code></li>
-                    <li className="flex items-center gap-1.5"><ChevronRight size={10} className="text-amber-400" /><code className="text-zinc-300">channel, country, os, device_model, app_version</code></li>
-                    <li className="flex items-center gap-1.5"><ChevronRight size={10} className="text-amber-400" /><code className="text-zinc-300">consent_flags</code> (tracking + marketing)</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-base font-bold text-zinc-200 mb-3 flex items-center gap-2"><Database size={16} className="text-blue-400" />Event Schema</h4>
-              <div className="bg-zinc-800/50 rounded p-2.5 border border-zinc-700 mb-2">
-                <div className="font-mono text-[12px] text-blue-400 mb-1">event_log (fact table)</div>
-                <code className="text-[12px] text-zinc-400 leading-relaxed">
-                  (game_user_id, event_time, event_name, params_json, session_id, client_time, server_time, app_version)
-                </code>
-              </div>
-              <div className="text-sm text-zinc-400 space-y-1">
-                <p className="font-semibold text-zinc-300">Must-have events:</p>
-                <div className="grid grid-cols-2 gap-1">
-                  {["session start/end", "level/stage progression", "earn/spend currencies", "guild join, chat, friend add", "gacha open, battle pass", "tutorial steps, first PvP"].map((e) => (
-                    <div key={e} className="flex items-center gap-1 text-[12px]"><CheckCircle2 size={10} className="text-emerald-400" />{e}</div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-base font-bold text-zinc-200 mb-3 flex items-center gap-2"><TrendingUp size={16} className="text-green-400" />Payments (Server-Authoritative)</h4>
-              <div className="bg-zinc-800/50 rounded p-2.5 border border-zinc-700 mb-2">
-                <code className="text-[12px] text-zinc-400">payment_txn(game_user_id, txn_time, amount_usd, product_sku, payment_channel, is_refund)</code>
-              </div>
-              <div className="text-[12px] text-zinc-500">Also helpful: gross, net, tax, platform_fee, chargebacks/refunds</div>
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-base font-bold text-zinc-200 mb-3 flex items-center gap-2"><BarChart3 size={16} className="text-cyan-400" />UA Cost Data (Optional)</h4>
-              <div className="bg-zinc-800/50 rounded p-2.5 border border-zinc-700 mb-2">
-                <code className="text-[12px] text-zinc-400">ua_cost(campaign_id, date, spend, impressions, clicks, installs)</code>
-              </div>
-              <div className="text-[12px] text-zinc-500">For ROAS & bidding simulation — not required for pLTV label.</div>
-            </div>
-          </div>
-
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-300">
-            <strong>Privacy note:</strong> If you can&apos;t use ad IDs due to privacy, push audiences via platform-specific APIs using hashed identifiers (email/phone) only with consent. Otherwise focus on internal UA evaluation.
-          </div>
-
-          <div className="flex justify-end">
-            <button onClick={() => setActiveStep(1)} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-base font-semibold rounded-lg hover:bg-emerald-500">
-              Continue to Raw Ingestion <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ═══ Step 1: Raw Ingestion (Bronze) ═══ */}
       {activeStep === 1 && (
@@ -1144,7 +1299,7 @@ export default function PLTVPipeline() {
           )}
 
           <div className="flex justify-between">
-            <button onClick={() => setActiveStep(0)} className="px-4 py-2 text-base text-zinc-400 hover:text-zinc-200">Back</button>
+            <button onClick={() => setActiveStep(1)} className="px-4 py-2 text-base text-zinc-400 hover:text-zinc-200">Back</button>
             <button onClick={() => { if (!dataGenerated) handleGenerateData(); setActiveStep(2); }} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-base font-semibold rounded-lg hover:bg-emerald-500">
               Next: Clean & Unify <ArrowRight size={14} />
             </button>
@@ -1979,8 +2134,126 @@ export default function PLTVPipeline() {
       {activeStep === 5 && (
         <div className="space-y-4">
           <InfoBanner title="Step 5 — Model Training" variant="info">
-            <p>Select a <strong>training dataset</strong> from Step 4, configure the target variable and model track, then train. Save the model to the registry for scoring in Step 6.</p>
+            <p>Pick the <strong>business problem</strong> you want to solve, tag the model category, select training data, then train. The problem selection is for context — it guides which features matter and what decisions the model will power.</p>
           </InfoBanner>
+
+          {/* ─── Problem Selector (11 JTBD) — Collapsible ─── */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <button onClick={() => setProblemSelectorOpen((v) => !v)}
+              className="w-full flex items-center gap-2 p-4 hover:bg-zinc-800/30 transition-colors">
+              <HelpCircle size={14} className="text-emerald-400 shrink-0" />
+              <span className="text-sm font-bold text-zinc-200">What business question are you solving?</span>
+              {selectedProblemId && (() => {
+                const prob = DECISION_PROBLEMS.find((p) => p.id === selectedProblemId);
+                return prob ? (
+                  <span className="flex items-center gap-1.5 ml-2">
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.5 rounded">{prob.id}</span>
+                    <span className="text-[12px] text-zinc-400">{prob.shortLabel}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${MODEL_CATEGORY_META[selectedModelCategory].bgColor} ${MODEL_CATEGORY_META[selectedModelCategory].color}`}>{MODEL_CATEGORY_META[selectedModelCategory].label}</span>
+                  </span>
+                ) : null;
+              })()}
+              <span className="text-[11px] text-zinc-500 ml-auto mr-2">{problemSelectorOpen ? "Collapse" : "Expand"}</span>
+              <ChevronRight size={14} className={`text-zinc-500 transition-transform ${problemSelectorOpen ? "rotate-90" : ""}`} />
+            </button>
+
+            {problemSelectorOpen && (
+              <div className="px-4 pb-4 space-y-3 border-t border-zinc-800">
+                {/* UA Problems */}
+                <div className="pt-3">
+                  <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><DollarSign size={10} className="text-emerald-400" /> UA Decisions</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {DECISION_PROBLEMS.filter((p) => p.category === "UA").map((p) => {
+                      const isSelected = selectedProblemId === p.id;
+                      return (
+                        <button key={p.id} onClick={() => {
+                          setSelectedProblemId(isSelected ? null : p.id);
+                          if (!isSelected && p.modelFamily[0]) {
+                            const newCat = p.modelFamily[0];
+                            setSelectedModelCategory(newCat);
+                            const rec = TARGET_VAR_OPTIONS[newCat].find((t) => t.recommended) ?? TARGET_VAR_OPTIONS[newCat][0];
+                            setSelectedTargetKey(rec.key); setTargetVar(rec.engineTarget); setModelResult(null);
+                          }
+                        }}
+                          className={`text-left p-3 rounded-lg border transition-all ${isSelected ? "border-emerald-500/50 bg-emerald-500/10" : "border-zinc-700 hover:border-zinc-600 bg-zinc-800/30"}`}>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.5 rounded">{p.id}</span>
+                            <span className="text-[12px] font-semibold text-zinc-200">{p.shortLabel}</span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400 leading-snug">{p.question}</p>
+                          <div className="flex gap-1 mt-1.5">{p.modelFamily.map((mf) => <span key={mf} className={`text-[9px] px-1.5 py-0.5 rounded-full border ${MODEL_CATEGORY_META[mf].bgColor} ${MODEL_CATEGORY_META[mf].color}`}>{MODEL_CATEGORY_META[mf].label}</span>)}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* LiveOps + Intent Problems */}
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Gamepad2 size={10} className="text-purple-400" /> LiveOps &amp; Intent Decisions</div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {DECISION_PROBLEMS.filter((p) => p.category === "LiveOps").map((p) => {
+                      const isSelected = selectedProblemId === p.id;
+                      return (
+                        <button key={p.id} onClick={() => {
+                          setSelectedProblemId(isSelected ? null : p.id);
+                          if (!isSelected && p.modelFamily[0]) {
+                            const newCat = p.modelFamily[0];
+                            setSelectedModelCategory(newCat);
+                            const rec = TARGET_VAR_OPTIONS[newCat].find((t) => t.recommended) ?? TARGET_VAR_OPTIONS[newCat][0];
+                            setSelectedTargetKey(rec.key); setTargetVar(rec.engineTarget); setModelResult(null);
+                          }
+                        }}
+                          className={`text-left p-3 rounded-lg border transition-all ${isSelected ? "border-purple-500/50 bg-purple-500/10" : "border-zinc-700 hover:border-zinc-600 bg-zinc-800/30"}`}>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${p.id.startsWith("INT") ? "text-cyan-400 bg-cyan-500/20" : "text-purple-400 bg-purple-500/20"}`}>{p.id}</span>
+                            <span className="text-[12px] font-semibold text-zinc-200">{p.shortLabel}</span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400 leading-snug line-clamp-2">{p.question}</p>
+                          <div className="flex gap-1 mt-1.5">{p.modelFamily.map((mf) => <span key={mf} className={`text-[9px] px-1.5 py-0.5 rounded-full border ${MODEL_CATEGORY_META[mf].bgColor} ${MODEL_CATEGORY_META[mf].color}`}>{MODEL_CATEGORY_META[mf].label}</span>)}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Selected problem detail + model category tag */}
+                {selectedProblemId && (() => {
+                  const prob = DECISION_PROBLEMS.find((p) => p.id === selectedProblemId)!;
+                  return (
+                    <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 grid grid-cols-3 gap-4">
+                      <div>
+                        <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">Core Features (Suggested)</div>
+                        <div className="space-y-0.5">{prob.coreFeatures.map((f) => <div key={f} className="flex items-center gap-1.5 text-[11px] text-zinc-400"><ChevronRight size={8} className="text-emerald-400 shrink-0" />{f}</div>)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">Activation Usecases</div>
+                        <div className="space-y-0.5">{prob.activationUsecases.map((u) => <div key={u} className="flex items-center gap-1.5 text-[11px] text-zinc-400"><CheckCircle2 size={8} className="text-blue-400 shrink-0" />{u}</div>)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-2">Model Category Tag</div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {(["value", "risk", "responsiveness", "intent"] as ModelCategory[]).map((cat) => {
+                            const meta = MODEL_CATEGORY_META[cat];
+                            return (
+                              <button key={cat} onClick={() => {
+                                setSelectedModelCategory(cat);
+                                const rec = TARGET_VAR_OPTIONS[cat].find((t) => t.recommended) ?? TARGET_VAR_OPTIONS[cat][0];
+                                setSelectedTargetKey(rec.key); setTargetVar(rec.engineTarget); setModelResult(null);
+                              }}
+                                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-[12px] font-medium border transition-all ${selectedModelCategory === cat ? meta.bgColor + " " + meta.color : "border-zinc-700 text-zinc-500 hover:border-zinc-600"}`}>
+                                {meta.icon} {meta.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-3 gap-4">
             {/* Training Dataset Selector */}
@@ -2017,28 +2290,37 @@ export default function PLTVPipeline() {
               })()}
             </div>
 
-            {/* Target Variable */}
+            {/* Target Variable — dynamic based on model category */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-sm font-bold text-zinc-200 mb-3 flex items-center gap-2">
+              <h4 className="text-sm font-bold text-zinc-200 mb-1 flex items-center gap-2">
                 <Target size={12} className="text-blue-400" /> Target Variable
               </h4>
-              <div className="space-y-2">
-                {(["ltv_d60", "ltv_d30"] as const).map((t) => (
-                  <label key={t} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-all ${
-                    targetVar === t ? "border-emerald-500/50 bg-emerald-500/10" : "border-zinc-800 hover:border-zinc-700"
+              <div className="text-[10px] text-zinc-500 mb-2 flex items-center gap-1.5">
+                Showing targets for <span className={`font-semibold ${MODEL_CATEGORY_META[selectedModelCategory].color}`}>{MODEL_CATEGORY_META[selectedModelCategory].label}</span> models
+              </div>
+              <div className="space-y-1.5">
+                {TARGET_VAR_OPTIONS[selectedModelCategory].map((opt) => (
+                  <label key={opt.key} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-all ${
+                    selectedTargetKey === opt.key ? "border-emerald-500/50 bg-emerald-500/10" : "border-zinc-800 hover:border-zinc-700"
                   }`}>
-                    <input type="radio" checked={targetVar === t} onChange={() => { setTargetVar(t); setModelResult(null); }} className="accent-emerald-500" />
-                    <div>
-                      <div className="text-[13px] text-zinc-200">{t === "ltv_d60" ? "LTV D60" : "LTV D30"}</div>
-                      <div className="text-[11px] text-zinc-500">{t === "ltv_d60" ? "Revenue → day 60" : "Revenue → day 30"}</div>
+                    <input type="radio" checked={selectedTargetKey === opt.key} onChange={() => { setSelectedTargetKey(opt.key); setTargetVar(opt.engineTarget); setModelResult(null); }} className="accent-emerald-500" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[13px] text-zinc-200">{opt.label}</span>
+                        {opt.recommended && <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">REC</span>}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 truncate">{opt.desc}</div>
                     </div>
                   </label>
                 ))}
               </div>
-              <label className="flex items-center gap-2 text-[12px] text-zinc-300 cursor-pointer mt-2">
-                <input type="checkbox" checked={useLogTarget} onChange={(e) => { setUseLogTarget(e.target.checked); setModelResult(null); }} className="accent-emerald-500" />
-                Log-transform: <code className="text-emerald-400">log(1+LTV)</code>
-              </label>
+              <div className="mt-2 pt-2 border-t border-zinc-800">
+                <label className="flex items-center gap-2 text-[12px] text-zinc-300 cursor-pointer">
+                  <input type="checkbox" checked={useLogTarget} onChange={(e) => { setUseLogTarget(e.target.checked); setModelResult(null); }} className="accent-emerald-500" />
+                  Log-transform: <code className="text-emerald-400">log(1+y)</code>
+                </label>
+                <div className="text-[10px] text-zinc-600 mt-1 ml-5">Engine maps to <code className="text-zinc-500">{targetVar}</code></div>
+              </div>
             </div>
 
             {/* Model Track */}
@@ -2204,630 +2486,604 @@ export default function PLTVPipeline() {
         </div>
       )}
 
-      {/* ═══ Step 6: Online Inference ═══ */}
+      {/* ═══ Step 6: Strategy Comparator ═══ */}
       {activeStep === 6 && (
         <div className="space-y-4">
-          <InfoBanner title="Step 6 — Scoring &amp; Testing" variant="info">
-            <p>Select a <strong>saved model</strong> from Step 5 and <strong>any dataset</strong> from Step 4 (e.g. the test split, validation split, or even a different cohort). This simulates production scoring where a frozen model scores unseen data.</p>
+          <InfoBanner title="Step 6 — Strategy Comparator" variant="info">
+            <p>Compare how well different strategies predict <strong>LTV90</strong>. Select datasets, strategies (pLTV models + LTV-day baselines), and K values. The comparator evaluates recall, precision, lift, and value capture against the true LTV90 ranking.</p>
           </InfoBanner>
 
-          {/* ─── Historical vs Online callout ─── */}
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-sm text-blue-300 flex items-start gap-2">
-            <Server size={14} className="text-blue-400 mt-0.5 shrink-0" />
-            <div>
-              <strong>Historical Training → Online Inference separation:</strong>
-              <span className="text-zinc-400 ml-1">Step 5 trains on past data (e.g. Oct+Nov). Step 6 scores <em>new</em> data (e.g. Jan cohort) with the frozen model. This mirrors how production ML systems work — the model is retrained periodically on historical batches, while inference runs continuously on fresh data.</span>
-            </div>
-          </div>
-
-          {/* ─── Model × Dataset Selector ─── */}
-          <div className="bg-zinc-900 border border-emerald-500/20 rounded-xl p-5 space-y-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Server size={16} className="text-emerald-400" />
-              <span className="text-base font-bold text-zinc-200">Inference Configuration</span>
-              <span className="text-[11px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">Production pattern</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {/* Model selector */}
-              <div className="space-y-2">
-                <label className="text-[12px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <GitBranch size={10} className="text-emerald-400" /> Model Version
-                </label>
-                {modelRegistry.length === 0 ? (
-                  <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 text-sm text-zinc-500">
-                    <AlertTriangle size={12} className="text-amber-400 inline mr-1" />
-                    No models saved. Go to <button onClick={() => setActiveStep(5)} className="text-emerald-400 underline">Step 5</button> and train + save a model first.
-                  </div>
-                ) : (
-                  <select
-                    value={scoringModelId ?? ""}
-                    onChange={(e) => setScoringModelId(e.target.value ? Number(e.target.value) : null)}
-                    className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-base text-zinc-200 focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="">Select model...</option>
-                    {modelRegistry.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                )}
-                {scoringModelId && (() => {
-                  const m = modelRegistry.find((x) => x.id === scoringModelId);
-                  if (!m) return null;
-                  return (
-                    <div className="bg-zinc-800/50 rounded-lg p-2.5 border border-zinc-700 text-[12px] space-y-1">
-                      <div className="flex justify-between"><span className="text-zinc-500">Track</span><span className="text-zinc-300">{m.modelTrack}</span></div>
-                      <div className="flex justify-between"><span className="text-zinc-500">Features</span><span className="text-zinc-300">{m.features.length}</span></div>
-                      <div className="flex justify-between"><span className="text-zinc-500">R²</span><span className={m.r2 > 0.5 ? "text-green-400" : "text-amber-400"}>{m.r2}</span></div>
-                      <div className="flex justify-between"><span className="text-zinc-500">Target</span><span className="text-zinc-300">{m.useLogTarget ? `log(1+${m.targetVar})` : m.targetVar}</span></div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Dataset selector */}
-              <div className="space-y-2">
-                <label className="text-[12px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Database size={10} className="text-cyan-400" /> Dataset Version
-                </label>
+          {/* ─── Configuration Panel ─── */}
+          <div className="grid grid-cols-12 gap-4">
+            {/* Left: Dataset + Strategy + K selection */}
+            <div className="col-span-5 space-y-3">
+              {/* Dataset Selection */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2">
+                <h4 className="text-sm font-bold text-zinc-200 flex items-center gap-2"><Database size={12} className="text-cyan-400" />Evaluation Dataset</h4>
+                <div className="text-[11px] text-zinc-500">Select multiple datasets to evaluate across all</div>
                 {datasetRegistry.length === 0 ? (
                   <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 text-sm text-zinc-500">
                     <AlertTriangle size={12} className="text-amber-400 inline mr-1" />
-                    No datasets saved. Go to <button onClick={() => setActiveStep(4)} className="text-cyan-400 underline">Step 4</button> and save a dataset first.
+                    No datasets. Go to <button onClick={() => setActiveStep(4)} className="text-cyan-400 underline">Step 4</button> first.
                   </div>
                 ) : (
-                  <select
-                    value={scoringDatasetId ?? ""}
-                    onChange={(e) => setScoringDatasetId(e.target.value ? Number(e.target.value) : null)}
-                    className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-base text-zinc-200 focus:outline-none focus:border-cyan-500"
-                  >
-                    <option value="">Select dataset...</option>
-                    {datasetRegistry.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
+                  <div className="space-y-1">
+                    {datasetRegistry.map((d) => {
+                      const selected = scSelectedDatasetIds.includes(d.id);
+                      return (
+                        <button key={d.id} onClick={() => setScSelectedDatasetIds(selected ? scSelectedDatasetIds.filter((x) => x !== d.id) : [...scSelectedDatasetIds, d.id])}
+                          className={`w-full text-left rounded-lg p-2.5 border text-[12px] transition-all ${selected ? "bg-cyan-500/10 border-cyan-500/30" : "bg-zinc-800/30 border-zinc-700 hover:border-zinc-600"}`}>
+                          <div className="flex items-center justify-between">
+                            <span className={`font-semibold ${selected ? "text-cyan-400" : "text-zinc-300"}`}>{d.name.split(" — ")[0]}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${d.splitRole === "test" ? "bg-amber-500/20 text-amber-400" : "bg-zinc-700 text-zinc-400"}`}>{d.splitRole}</span>
+                          </div>
+                          <div className="flex gap-3 mt-1 text-[10px] text-zinc-500">
+                            <span>{d.rowCount} users</span>
+                            <span>Payer {d.payerRate}%</span>
+                            <span>Avg LTV60 ${d.avgLTV}</span>
+                            <span>Avg LTV90 ${d.avgLTV90}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
-                {scoringDatasetId && (() => {
-                  const d = datasetRegistry.find((x) => x.id === scoringDatasetId);
-                  if (!d) return null;
-                  return (
-                    <div className="bg-zinc-800/50 rounded-lg p-2.5 border border-zinc-700 text-[12px] space-y-1">
-                      <div className="flex justify-between"><span className="text-zinc-500">Source</span><span className="text-zinc-300">{d.source ?? "unknown"}</span></div>
-                      <div className="flex justify-between"><span className="text-zinc-500">Users</span><span className="text-zinc-300">{d.rowCount}</span></div>
-                      <div className="flex justify-between"><span className="text-zinc-500">Date Range</span><span className="text-zinc-300">{d.dateRange ? `${d.dateRange.min} → ${d.dateRange.max}` : "—"}</span></div>
-                      <div className="flex justify-between"><span className="text-zinc-500">Payer Rate</span><span className="text-zinc-300">{d.payerRate}%</span></div>
-                      <div className="flex justify-between"><span className="text-zinc-500">Avg LTV</span><span className="text-emerald-400">${d.avgLTV}</span></div>
-                      {d.filters !== "none" && <div className="flex justify-between"><span className="text-zinc-500">Filters</span><span className="text-purple-400">{d.filters}</span></div>}
-                    </div>
-                  );
-                })()}
               </div>
+
+              {/* Strategy Selection */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2">
+                <h4 className="text-sm font-bold text-zinc-200 flex items-center gap-2"><Crosshair size={12} className="text-emerald-400" />Strategies</h4>
+                <div className="space-y-1">
+                  {([
+                    { id: "model_a" as StrategyId, label: "Model A (pLTV GBT)", color: "text-emerald-400", desc: modelRegistry.length > 0 ? `${modelRegistry[0].name}` : "Trained via Step 5" },
+                    { id: "model_b" as StrategyId, label: "Model B (Cold-Start)", color: "text-blue-400", desc: "Engagement-only heuristic — sessions, progression, social (no revenue)" },
+                    { id: "model_c" as StrategyId, label: "Model C (Noisy Ensemble)", color: "text-purple-400", desc: "Model A + ±40% deterministic noise — simulates poor calibration" },
+                    { id: "ltv3d" as StrategyId, label: "LTV 3d Ranking", color: "text-amber-400", desc: "Early-payer D3 proxy — revenue within 72h + session activity" },
+                    { id: "ltv7d" as StrategyId, label: "LTV 7d Ranking", color: "text-red-400", desc: "Raw D7 revenue ranking" },
+                  ]).map((s) => {
+                    const checked = scSelectedStrategies.includes(s.id);
+                    return (
+                      <label key={s.id} className={`flex items-center gap-2 rounded-lg p-2 border cursor-pointer transition-all ${checked ? "bg-zinc-800/50 border-zinc-600" : "border-zinc-800 hover:border-zinc-700"}`}>
+                        <input type="checkbox" checked={checked}
+                          onChange={() => setScSelectedStrategies((prev) => checked ? prev.filter((x) => x !== s.id) : [...prev, s.id])}
+                          className="accent-emerald-500 w-3.5 h-3.5" />
+                        <div className="flex-1">
+                          <span className={`text-[12px] font-semibold ${s.color}`}>{s.label}</span>
+                          <div className="text-[10px] text-zinc-500">{s.desc}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* K Selection */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2">
+                <h4 className="text-sm font-bold text-zinc-200 flex items-center gap-2"><TrendingUp size={12} className="text-purple-400" />K Selection</h4>
+                <div className="flex gap-1 bg-zinc-800 rounded-lg p-0.5">
+                  <button onClick={() => setScKMode("manual")} className={`flex-1 px-2 py-1.5 rounded text-[12px] font-medium ${scKMode === "manual" ? "bg-purple-600/20 text-purple-400 border border-purple-500/30" : "text-zinc-500"}`}>Manual K</button>
+                  <button onClick={() => setScKMode("preset")} className={`flex-1 px-2 py-1.5 rounded text-[12px] font-medium ${scKMode === "preset" ? "bg-purple-600/20 text-purple-400 border border-purple-500/30" : "text-zinc-500"}`}>Preset Sweep</button>
+                </div>
+                {scKMode === "manual" ? (
+                  <div className="flex items-center gap-2">
+                    <input type="range" min={10} max={Math.max(10, scSelectedDatasetIds.length > 0 ? (datasetRegistry.find((d) => d.id === scSelectedDatasetIds[0])?.rowCount ?? 1000) : 1000)} step={10} value={scManualK}
+                      onChange={(e) => setScManualK(Number(e.target.value))} className="flex-1 accent-purple-500 h-1.5" />
+                    <input type="number" value={scManualK} onChange={(e) => setScManualK(Number(e.target.value))}
+                      className="w-20 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[12px] text-zinc-200 font-mono" />
+                  </div>                  
+                ) : (
+                  <div className="text-[11px] text-zinc-400">
+                    Sweep: 0.1%, 0.5%, 1%, 2%, 5%, 10% + absolute 100, 500, 1000
+                  </div>
+                )}
+              </div>
+
+              {/* Run Button */}
+              <button onClick={handleRunComparison} disabled={scSelectedDatasetIds.length === 0 || scSelectedStrategies.length === 0}
+                className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white text-base font-semibold rounded-lg hover:bg-emerald-500 active:scale-[0.98] disabled:bg-zinc-800 disabled:text-zinc-600 w-full justify-center">
+                <Play size={16} /> Run Comparison ({scSelectedStrategies.length} strategies × {scSelectedDatasetIds.length} datasets)
+              </button>
             </div>
 
-            <button
-              onClick={handleRunScoring}
-              disabled={!scoringModelId || !scoringDatasetId}
-              className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white text-base font-semibold rounded-lg hover:bg-emerald-500 active:scale-[0.98] disabled:bg-zinc-800 disabled:text-zinc-600 w-full justify-center"
-            >
-              <Zap size={16} /> Run Scoring — {scoringModelId && scoringDatasetId ? `Model ${scoringModelId} × Dataset ${scoringDatasetId}` : "Select both to proceed"}
-            </button>
-          </div>
-
-          {/* ─── API Contract (collapsible) ─── */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-            <button onClick={() => setApiContractExpanded((v) => !v)}
-              className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/30 transition-colors">
-              <div className="flex items-center gap-2">
-                <Server size={14} className="text-purple-400" />
-                <span className="text-sm font-semibold text-zinc-200">Production API Contract</span>
-                <span className="text-[11px] text-zinc-500">How external services request scoring</span>
-              </div>
-              <ChevronRight size={14} className={`text-zinc-500 transition-transform ${apiContractExpanded ? "rotate-90" : ""}`} />
-            </button>
-            {apiContractExpanded && (
-              <div className="px-4 pb-4 space-y-3 border-t border-zinc-800">
-                <div className="grid grid-cols-2 gap-4 mt-3">
-                  <div>
-                    <div className="text-[11px] font-semibold text-purple-400 uppercase tracking-wider mb-1.5">Request</div>
-                    <pre className="bg-zinc-800 rounded-lg p-3 text-[12px] text-zinc-300 font-mono border border-zinc-700 overflow-x-auto">{`POST /api/v1/score
-Content-Type: application/json
-Authorization: Bearer <api_key>
-
-{
-  "model_version": "${scoringModelId ? `v${scoringModelId}` : "<model_id>"}",
-  "dataset_version": "${scoringDatasetId ? `ds_v${scoringDatasetId}` : "<dataset_id>"}",
-  "audience_rules": {
-    "whale":     { "min_decile": 10, "action": "vip_onboarding" },
-    "high_value": { "min_decile": 8, "action": "premium_offer" },
-    "mid_value":  { "min_decile": 5, "action": "engagement_push" },
-    "low_value":  { "min_decile": 1, "action": "retention_campaign" }
-  },
-  "output_format": "user_id_list"
-}`}</pre>
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1.5">Response</div>
-                    <pre className="bg-zinc-800 rounded-lg p-3 text-[12px] text-zinc-300 font-mono border border-zinc-700 overflow-x-auto">{`{
-  "job_id": "score_20240212_001",
-  "model_version": "${scoringModelId ? `v${scoringModelId}` : "<model_id>"}",
-  "dataset_version": "${scoringDatasetId ? `ds_v${scoringDatasetId}` : "<dataset_id>"}",
-  "scored_at": "${new Date().toISOString()}",
-  "total_users": ${scoringResult?.scoredUsers.length ?? "N"},
-  "audiences": {
-    "whale":      { "count": ${scoringResult?.audiences.find((a) => a.name.includes("Whale"))?.userCount ?? "?"}, "action": "vip_onboarding" },
-    "high_value": { "count": ${scoringResult?.audiences.find((a) => a.name.includes("High"))?.userCount ?? "?"}, "action": "premium_offer" },
-    "mid_value":  { "count": ${scoringResult?.audiences.find((a) => a.name.includes("Mid"))?.userCount ?? "?"}, "action": "engagement_push" }
-  },
-  "download_url": "/exports/score_20240212_001.parquet"
-}`}</pre>
-                  </div>
+            {/* Right: Results */}
+            <div className="col-span-7 space-y-3">
+              {!scComparisonResult ? (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center space-y-3">
+                  <BarChart3 size={32} className="text-zinc-600 mx-auto" />
+                  <div className="text-sm text-zinc-500">Select datasets, strategies, and K values, then click <strong className="text-emerald-400">Run Comparison</strong>.</div>
+                  {modelRegistry.length === 0 && (
+                    <div className="text-[11px] text-amber-400 flex items-center gap-1 justify-center"><AlertTriangle size={10} />Train and save a model in Step 5 first for pLTV model strategies.</div>
+                  )}
                 </div>
-                <div className="bg-purple-500/5 border border-purple-500/10 rounded-lg p-2.5 text-[12px] text-purple-300 flex items-start gap-2">
-                  <Clock size={12} className="text-purple-400 mt-0.5 shrink-0" />
-                  <span>
-                    <strong>Production flow:</strong> UA team or scheduled pipeline calls this endpoint daily with the latest dataset snapshot.
-                    The scoring service loads the specified model weights, computes pLTV for every user, segments into audiences, and returns user_id lists
-                    that are pushed to ad platforms (Meta, Google, TikTok) for lookalike seeding or value-based optimization.
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ─── Scoring Results ─── */}
-          {scoringResult && (
-            <div className="space-y-4">
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-emerald-300 flex items-center gap-2">
-                <CheckCircle2 size={14} className="text-emerald-400" />
-                <span>Scored <strong>{scoringResult.scoredUsers.length}</strong> users using <strong className="text-emerald-200">{scoringResult.modelName}</strong> on <strong className="text-cyan-300">{scoringResult.datasetName}</strong></span>
-                <span className="ml-auto text-[11px] text-zinc-500">{new Date(scoringResult.timestamp).toLocaleTimeString()}</span>
-              </div>
-
-              {/* Segment summary */}
-              <div className="grid grid-cols-5 gap-2">
-                {["Whale (Top 1%)", "High Value", "Mid Value", "Low Value", "Minimal Value"].map((seg) => {
-                  const users = scoringResult.scoredUsers.filter((u) => u.segment === seg);
-                  const avgPred = users.length > 0 ? Math.round(users.reduce((s, u) => s + u.pltv_pred, 0) / users.length * 100) / 100 : 0;
-                  return (
-                    <div key={seg} className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
-                      <div className="text-[12px] text-zinc-500">{seg}</div>
-                      <div className="text-lg font-bold text-emerald-400">{users.length}</div>
-                      <div className="text-[11px] text-zinc-600">Avg pLTV: <span className="text-zinc-400">${avgPred}</span></div>
+              ) : (
+                <>
+                  {/* Dataset info */}
+                  {scSelectedDatasetIds.length > 0 && (() => {
+                    const selectedDatasets = scSelectedDatasetIds.map(id => datasetRegistry.find(d => d.id === id)).filter((d): d is PLTVDatasetVersion => d !== undefined);
+                    if (selectedDatasets.length === 0) return null;
+                    
+                    const totalUsers = selectedDatasets.reduce((sum, d) => sum + d.rowCount, 0);
+                    const totalLtv90 = selectedDatasets.reduce((sum, d) => sum + (d.avgLTV90 * d.rowCount), 0);
+                    const avgLtv90 = totalUsers > 0 ? Math.round((totalLtv90 / totalUsers) * 100) / 100 : 0;
+                    
+                    return (
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm font-semibold text-cyan-400">
+                              {selectedDatasets.length === 1 ? selectedDatasets[0].name : `${selectedDatasets.length} datasets combined`}
+                            </div>
+                            <div className="text-[11px] text-zinc-500">
+                              {totalUsers.toLocaleString()} users • Avg LTV90 ${avgLtv90} • 
+                              {selectedDatasets.length === 1 ? `${selectedDatasets[0].splitRole} set` : `${selectedDatasets.map(d => d.splitRole).join(", ")} sets`}
+                            </div>
+                            {selectedDatasets.length > 1 && (
+                              <div className="text-[10px] text-zinc-600 mt-1">
+                                {selectedDatasets.map(d => `${d.name.split(" — ")[0]} (${d.rowCount})`).join(" • ")}
+                              </div>
+                            )}
+                          </div>
+                          <div className={`px-2 py-1 rounded text-[10px] font-bold ${
+                            selectedDatasets.length === 1 && selectedDatasets[0].splitRole === "test" ? "bg-amber-500/20 text-amber-400" : 
+                            selectedDatasets.length === 1 && selectedDatasets[0].splitRole === "validation" ? "bg-blue-500/20 text-blue-400" : 
+                            selectedDatasets.length === 1 ? "bg-green-500/20 text-green-400" :
+                            "bg-purple-500/20 text-purple-400"
+                          }`}>
+                            {selectedDatasets.length === 1 ? selectedDatasets[0].splitRole.toUpperCase() : "MULTI"}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  
+                  {/* Summary cards */}
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-center">
+                      <div className="text-xl font-bold text-emerald-400">{scComparisonResult.totalUsers.toLocaleString()}</div>
+                      <div className="text-[11px] text-zinc-500">Total Users</div>
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Scored users table */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-semibold text-zinc-300">Scored Users (top 20 by predicted LTV)</h4>
-                  <div className="flex items-center gap-2 text-[11px] text-zinc-500">
-                    <Hash size={10} /> Model: <span className="text-emerald-400 font-mono">{scoringResult.modelName.split(" — ")[0]}</span>
-                    · Dataset: <span className="text-cyan-400 font-mono">{scoringResult.datasetName.split(" — ")[0]}</span>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-center">
+                      <div className="text-xl font-bold text-cyan-400">${scComparisonResult.avgLtv90}</div>
+                      <div className="text-[11px] text-zinc-500">Avg LTV90</div>
+                    </div>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-center">
+                      <div className="text-xl font-bold text-purple-400">{scComparisonResult.strategies.length}</div>
+                      <div className="text-[11px] text-zinc-500">Strategies</div>
+                    </div>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-center">
+                      <div className="text-xl font-bold text-amber-400">{scComparisonResult.kValues.length}</div>
+                      <div className="text-[11px] text-zinc-500">K Values</div>
+                    </div>
                   </div>
-                </div>
-                <div className="overflow-x-auto max-h-[280px]">
-                  <table className="w-full text-[12px]">
-                    <thead className="sticky top-0 bg-zinc-900 z-10">
-                      <tr className="border-b border-zinc-800">
-                        <th className="px-2 py-1.5 text-left text-zinc-500">user</th>
-                        <th className="px-2 py-1.5 text-left text-zinc-500">pLTV Pred</th>
-                        <th className="px-2 py-1.5 text-left text-zinc-500">Actual D60</th>
-                        <th className="px-2 py-1.5 text-left text-zinc-500">Decile</th>
-                        <th className="px-2 py-1.5 text-left text-zinc-500">Segment</th>
-                        <th className="px-2 py-1.5 text-left text-zinc-500">Payer D7</th>
-                        <th className="px-2 py-1.5 text-left text-zinc-500">Level</th>
-                        <th className="px-2 py-1.5 text-left text-zinc-500">Guild</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-800/50">
-                      {[...scoringResult.scoredUsers]
-                        .sort((a, b) => b.pltv_pred - a.pltv_pred)
-                        .slice(0, 20)
-                        .map((u) => (
-                          <tr key={u.game_user_id} className={`hover:bg-zinc-800/30 ${u.is_top_1pct ? "bg-amber-500/5" : ""}`}>
-                            <td className="px-2 py-1 text-cyan-400 font-mono">{u.game_user_id}</td>
-                            <td className="px-2 py-1 text-emerald-400 font-mono font-bold">${u.pltv_pred}</td>
-                            <td className="px-2 py-1 text-zinc-300 font-mono">${u.actual_ltv_d60}</td>
-                            <td className="px-2 py-1 font-mono">{u.pltv_decile}</td>
-                            <td className="px-2 py-1">
-                              <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${
-                                u.segment.includes("Whale") ? "bg-amber-500/20 text-amber-400" :
-                                u.segment.includes("High") ? "bg-emerald-500/20 text-emerald-400" :
-                                u.segment.includes("Mid") ? "bg-blue-500/20 text-blue-400" :
-                                "bg-zinc-700 text-zinc-400"
-                              }`}>{u.segment}</span>
-                            </td>
-                            <td className="px-2 py-1">{u.features.is_payer_by_d7 ? <CheckCircle2 size={10} className="text-green-400" /> : <span className="text-zinc-600">—</span>}</td>
-                            <td className="px-2 py-1 text-zinc-300 font-mono">{u.features.max_level_w7d}</td>
-                            <td className="px-2 py-1">{u.features.joined_guild_by_d3 ? <CheckCircle2 size={10} className="text-green-400" /> : <span className="text-zinc-600">—</span>}</td>
+
+                  {/* Metrics Table */}
+                  {/* <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                    <h4 className="text-sm font-bold text-zinc-200 mb-2 flex items-center gap-2"><BarChart3 size={12} className="text-emerald-400" />Strategy Metrics by K</h4>
+                    <div className="overflow-x-auto max-h-[340px]">
+                      <table className="w-full text-[11px]">
+                        <thead className="sticky top-0 bg-zinc-900 z-10">
+                          <tr className="border-b border-zinc-800">
+                            <th className="px-2 py-1.5 text-left text-zinc-500">Strategy</th>
+                            <th className="px-2 py-1.5 text-right text-zinc-500">K</th>
+                            <th className="px-2 py-1.5 text-right text-zinc-500">K%</th>
+                            <th className="px-2 py-1.5 text-right text-zinc-500">Recall</th>
+                            <th className="px-2 py-1.5 text-right text-zinc-500">Precision</th>
+                            <th className="px-2 py-1.5 text-right text-zinc-500">Lift vs Rand</th>
+                            <th className="px-2 py-1.5 text-right text-zinc-500">Lift vs LTV7</th>
+                            <th className="px-2 py-1.5 text-right text-zinc-500">Value Cap</th>
+                            <th className="px-2 py-1.5 text-right text-zinc-500">Mean LTV90</th>
+                            <th className="px-2 py-1.5 text-right text-zinc-500">N</th>
                           </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Predicted vs Actual scatter */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-zinc-300 mb-2">Predicted vs Actual LTV</h4>
-                <ResponsiveContainer width="100%" height={200}>
-                  <ScatterChart>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                    <XAxis dataKey="x" name="Predicted" tick={{ fill: "#71717a", fontSize: 12 }} axisLine={{ stroke: "#3f3f46" }} label={{ value: "Predicted pLTV ($)", position: "bottom", fill: "#52525b", fontSize: 12 }} />
-                    <YAxis dataKey="y" name="Actual" tick={{ fill: "#71717a", fontSize: 12 }} axisLine={{ stroke: "#3f3f46" }} label={{ value: "Actual LTV D60 ($)", angle: -90, position: "insideLeft", offset: 10, fill: "#52525b", fontSize: 12 }} />
-                    <Tooltip contentStyle={{ backgroundColor: "#d8890aff", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: "13px" }} />
-                    <Scatter
-                      data={scoringResult.scoredUsers.slice(0, 200).map((u) => ({ x: u.pltv_pred, y: u.actual_ltv_d60, user: u.game_user_id }))}
-                      fill="#10b981"
-                      fillOpacity={0.6}
-                    />
-                  </ScatterChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Audience actions */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Users size={14} className="text-amber-400" />
-                  <span className="text-sm font-semibold text-zinc-200">Audience → Action Mapping</span>
-                  <span className="text-[11px] text-zinc-500">Each audience set is sent to ad platforms with a specific action</span>
-                </div>
-                <div className="space-y-2">
-                  {scoringResult.audiences.map((aud) => (
-                    <div key={aud.id} className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700 flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-semibold text-zinc-200">{aud.name}</div>
-                        <div className="text-[11px] text-zinc-500">{aud.description}</div>
-                        <code className="text-[10px] px-1.5 py-0.5 bg-zinc-700 rounded text-zinc-400 mt-1 inline-block">{aud.criteria}</code>
-                      </div>
-                      <div className="flex items-center gap-4 text-sm">
-                        <div className="text-center"><div className="text-[11px] text-zinc-500">Users</div><div className="font-bold text-emerald-400">{aud.userCount}</div></div>
-                        <div className="text-center"><div className="text-[11px] text-zinc-500">Avg pLTV</div><div className="font-bold text-blue-400">${aud.avgPLTV}</div></div>
-                        <div className="text-center"><div className="text-[11px] text-zinc-500">Match</div><div className="font-bold text-purple-400">{aud.matchRate}%</div></div>
-                      </div>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800/50">
+                          {scComparisonResult.metrics.map((m, i) => {
+                            const stratColor = m.strategyId === "model_a" ? "text-emerald-400" : m.strategyId === "model_b" ? "text-blue-400" : m.strategyId === "model_c" ? "text-purple-400" : m.strategyId === "ltv3d" ? "text-amber-400" : m.strategyId === "ltv7d" ? "text-red-400" : "text-cyan-400";
+                            return (
+                              <tr key={i} className="hover:bg-zinc-800/30">
+                                <td className={`px-2 py-1 font-semibold ${stratColor}`}>{m.strategyLabel}</td>
+                                <td className="px-2 py-1 text-right font-mono text-zinc-300">{m.k}</td>
+                                <td className="px-2 py-1 text-right font-mono text-zinc-400">{m.kPct}%</td>
+                                <td className={`px-2 py-1 text-right font-mono font-bold ${m.recall >= 0.8 ? "text-green-400" : m.recall >= 0.5 ? "text-amber-400" : "text-red-400"}`}>{(m.recall * 100).toFixed(1)}%</td>
+                                <td className="px-2 py-1 text-right font-mono text-zinc-300">{(m.precision * 100).toFixed(1)}%</td>
+                                <td className={`px-2 py-1 text-right font-mono ${m.liftVsRandom >= 2 ? "text-green-400" : "text-zinc-300"}`}>{m.liftVsRandom}×</td>
+                                <td className={`px-2 py-1 text-right font-mono ${m.liftVsLtv7 >= 1.1 ? "text-green-400" : m.liftVsLtv7 >= 0.95 ? "text-zinc-300" : "text-red-400"}`}>{m.liftVsLtv7}×</td>
+                                <td className="px-2 py-1 text-right font-mono text-emerald-400">{(m.cumValueCaptured * 100).toFixed(1)}%</td>
+                                <td className="px-2 py-1 text-right font-mono text-zinc-300">${m.meanLtv90}</td>
+                                <td className="px-2 py-1 text-right font-mono text-zinc-500">{m.selectedCount}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div> */}
+
+                  {/* ─── Offline Lift Curve ─── */}
+                  {scOffline && (
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h4 className="text-sm font-bold text-zinc-200 flex items-center gap-2"><TrendingUp size={12} className="text-purple-400" />Offline Lift Curve</h4>
+                          {scSelectedDatasetIds.length > 0 && (() => {
+                            const selectedDatasets = scSelectedDatasetIds.map(id => datasetRegistry.find(d => d.id === id)).filter((d): d is PLTVDatasetVersion => d !== undefined);
+                            const totalUsers = selectedDatasets.reduce((sum, d) => sum + d.rowCount, 0);
+                            return (
+                              <div className="text-[11px] text-zinc-500 mt-1">
+                                Dataset: {selectedDatasets.length === 1 ? selectedDatasets[0].name : `${selectedDatasets.length} datasets combined`} ({totalUsers.toLocaleString()} users)
+                              </div>
+                            );
+                          })()}
+                        </div>
+                        <div className="text-[11px] text-zinc-500 font-mono">{scOffline.offlineNote}</div>
+                      </div>
+                      {(() => {
+                        const base = scOffline.liftCurves[0]?.points ?? [];
+                        const data = base.map((p) => {
+                          const row: Record<string, number> = { x: p.x };
+                          for (const s of scOffline.liftCurves) {
+                            const pp = s.points.find((q) => q.x === p.x);
+                            row[s.strategyId] = pp ? pp.y : 0;
+                          }
+                          return row;
+                        });
+                        return (
+                          <ResponsiveContainer width="100%" height={220}>
+                            <LineChart data={data}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                              <XAxis dataKey="x" tick={{ fill: "#71717a", fontSize: 11 }} axisLine={{ stroke: "#3f3f46" }}
+                                tickFormatter={(v) => `${(Number(v) * 100).toFixed(0)}%`} />
+                              <YAxis tick={{ fill: "#71717a", fontSize: 11 }} axisLine={{ stroke: "#3f3f46" }} domain={[0, 1]}
+                                tickFormatter={(v) => `${(Number(v) * 100).toFixed(0)}%`} />
+                              <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: "12px" }}
+                                formatter={(v: unknown) => `${(Number(v) * 100).toFixed(1)}%`} labelFormatter={(l) => `${(Number(l) * 100).toFixed(1)}% selected`} />
+                              {scOffline.liftCurves.map((s) => (
+                                <Line key={s.strategyId} type="monotone" dataKey={s.strategyId} stroke={s.color} strokeWidth={2} dot={false} name={s.strategyLabel} />
+                              ))}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* ─── Offline Seed Quality @ Top-K ─── */}
+                  {scOffline && (
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                      <div>
+                        <h4 className="text-sm font-bold text-zinc-200 mb-2 flex items-center gap-2"><Target size={12} className="text-cyan-400" />Offline Seed Quality @ Top-K</h4>
+                        {scSelectedDatasetIds.length > 0 && (() => {
+                            const selectedDatasets = scSelectedDatasetIds.map(id => datasetRegistry.find(d => d.id === id)).filter((d): d is PLTVDatasetVersion => d !== undefined);
+                            const totalUsers = selectedDatasets.reduce((sum, d) => sum + d.rowCount, 0);
+                            return (
+                              <div className="text-[11px] text-zinc-500 mb-2">
+                                Dataset: {selectedDatasets.length === 1 ? selectedDatasets[0].name : `${selectedDatasets.length} datasets combined`} ({totalUsers.toLocaleString()} users)
+                              </div>
+                            );
+                          })()}
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[11px]">
+                          <thead>
+                            <tr className="border-b border-zinc-800">
+                              <th className="px-2 py-1.5 text-left text-zinc-500">Strategy</th>
+                              <th className="px-2 py-1.5 text-right text-zinc-500">K</th>
+                              <th className="px-2 py-1.5 text-right text-zinc-500">Revenue captured</th>
+                              <th className="px-2 py-1.5 text-right text-zinc-500">Precision@K (whales)</th>
+                              <th className="px-2 py-1.5 text-right text-zinc-500">Spearman ρ</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-800/50">
+                            {scOffline.seedQuality.map((r) => (
+                              <tr key={r.strategyId} className="hover:bg-zinc-800/30">
+                                <td className="px-2 py-1 font-semibold" style={{ color: scOffline.liftCurves.find((s) => s.strategyId === r.strategyId)?.color ?? "#a1a1aa" }}>
+                                  {r.strategyLabel}
+                                </td>
+                                <td className="px-2 py-1 text-right font-mono text-zinc-300">{r.k}</td>
+                                <td className="px-2 py-1 text-right font-mono text-emerald-400">{(r.revenueCaptured * 100).toFixed(1)}%</td>
+                                <td className="px-2 py-1 text-right font-mono text-zinc-300">{(r.precisionAtK * 100).toFixed(1)}%</td>
+                                <td className="px-2 py-1 text-right font-mono text-zinc-300">{r.spearman.toFixed(3)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="mt-2 text-[10px] text-zinc-500">Whale threshold (90th pctl): ${scOffline.whaleThreshold} • Total target revenue: ${scOffline.totalTargetRevenue.toLocaleString()} • {scOffline.isProxy ? "⚠ Using D60 proxy" : `Target: ${scOffline.targetLabel}`}</div>
+                    </div>
+                  )}
+
+                  {/* ─── Online Simulation (Activation) ─── */}
+                  {scOffline && (
+                    <div className="bg-zinc-900 border border-cyan-500/20 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-bold text-zinc-200 flex items-center gap-2"><Zap size={12} className="text-cyan-400" />Online Simulation (Activation)</h4>
+                          {scSelectedDatasetIds.length > 0 && (() => {
+                            const selectedDatasets = scSelectedDatasetIds.map(id => datasetRegistry.find(d => d.id === id)).filter((d): d is PLTVDatasetVersion => d !== undefined);
+                            const totalUsers = selectedDatasets.reduce((sum, d) => sum + d.rowCount, 0);
+                            return (
+                              <div className="text-[11px] text-zinc-500 mb-2">
+                                Dataset: {selectedDatasets.length === 1 ? selectedDatasets[0].name : `${selectedDatasets.length} datasets combined`} ({totalUsers.toLocaleString()} users)
+                              </div>
+                            );
+                          })()}
+                        </div>
+                        {scActivationResult && (
+                          <div className="text-[11px] text-zinc-500 font-mono">sendNonce={scActivationResult.sendNonce}</div>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2">
+                        <div>
+                          <div className="text-[10px] text-zinc-500 mb-1">Top-K</div>
+                          <input type="number" value={scActivationConfig.topK}
+                            onChange={(e) => setScActivationConfig((p) => ({ ...p, topK: Number(e.target.value) }))}
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[12px] text-zinc-200 font-mono" />
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-zinc-500 mb-1">Budget ($)</div>
+                          <input type="number" value={scActivationConfig.budget}
+                            onChange={(e) => setScActivationConfig((p) => ({ ...p, budget: Number(e.target.value) }))}
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[12px] text-zinc-200 font-mono" />
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-zinc-500 mb-1">Base CPI ($)</div>
+                          <input type="number" step={0.1} value={scActivationConfig.baseCPI}
+                            onChange={(e) => setScActivationConfig((p) => ({ ...p, baseCPI: Number(e.target.value) }))}
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[12px] text-zinc-200 font-mono" />
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-zinc-500 mb-1">Ads Sensitivity (0–1)</div>
+                          <input type="number" step={0.05} min={0} max={1} value={scActivationConfig.adsSensitivity}
+                            onChange={(e) => setScActivationConfig((p) => ({ ...p, adsSensitivity: Number(e.target.value) }))}
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[12px] text-zinc-200 font-mono" />
+                        </div>
+                      </div>
+
+                      <button onClick={handleSendActivation}
+                        className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white text-[12px] font-semibold rounded-lg hover:bg-cyan-500 active:scale-[0.98] w-full justify-center">
+                        <Server size={14} /> Send Seeds (Simulate Online)
+                      </button>
+
+                      {scActivationResult && (
+                        <>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-zinc-950/30 border border-zinc-800 rounded-lg p-3">
+                              <div className="text-[12px] font-bold text-zinc-200 mb-2">Activation Contract</div>
+                              <table className="w-full text-[11px]">
+                                <thead><tr className="border-b border-zinc-800">
+                                  <th className="px-2 py-1 text-left text-zinc-500">Strategy</th>
+                                  <th className="px-2 py-1 text-left text-zinc-500">Status</th>
+                                </tr></thead>
+                                <tbody className="divide-y divide-zinc-800/50">
+                                  {scActivationResult.contracts.map((c) => (
+                                    <tr key={c.strategyId}>
+                                      <td className="px-2 py-1 text-zinc-300">{c.strategyLabel}</td>
+                                      <td className="px-2 py-1 font-mono text-emerald-400">{c.status}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            <div className="bg-zinc-950/30 border border-zinc-800 rounded-lg p-3">
+                              <div className="text-[12px] font-bold text-zinc-200 mb-2">Activation Results</div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-[11px]">
+                                  <thead><tr className="border-b border-zinc-800">
+                                    <th className="px-2 py-1 text-left text-zinc-500">Strategy</th>
+                                    <th className="px-2 py-1 text-right text-zinc-500">CPI</th>
+                                    <th className="px-2 py-1 text-right text-zinc-500">Installs</th>
+                                    <th className="px-2 py-1 text-right text-zinc-500">Revenue (D30)</th>
+                                    <th className="px-2 py-1 text-right text-zinc-500">ROAS</th>
+                                    <th className="px-2 py-1 text-right text-zinc-500">Profit</th>
+                                  </tr></thead>
+                                  <tbody className="divide-y divide-zinc-800/50">
+                                    {scActivationResult.onlineResults.map((r) => (
+                                      <tr key={r.strategyId}>
+                                        <td className="px-2 py-1 text-zinc-300">{r.strategyLabel}</td>
+                                        <td className="px-2 py-1 text-right font-mono text-zinc-300">${r.cpi.toFixed(2)}</td>
+                                        <td className="px-2 py-1 text-right font-mono text-zinc-300">{r.installs.toLocaleString()}</td>
+                                        <td className="px-2 py-1 text-right font-mono text-emerald-400">${r.revenue.toLocaleString()}</td>
+                                        <td className="px-2 py-1 text-right font-mono text-zinc-300">{r.roas.toFixed(2)}×</td>
+                                        <td className={`px-2 py-1 text-right font-mono ${r.profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>${r.profit.toLocaleString()}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="bg-zinc-950/30 border border-zinc-800 rounded-lg p-3">
+                            <div className="text-[12px] font-bold text-zinc-200 mb-2">Revenue Curve (D0 → D30)</div>
+                            {(() => {
+                              const base = scActivationResult.onlineResults[0]?.revenueCurve ?? [];
+                              const data = base.map((p) => {
+                                const row: Record<string, number> = { day: p.day };
+                                for (const s of scActivationResult.onlineResults) {
+                                  const pp = s.revenueCurve.find((q) => q.day === p.day);
+                                  row[s.strategyId] = pp ? pp.revenue : 0;
+                                }
+                                return row;
+                              });
+                              return (
+                                <ResponsiveContainer width="100%" height={240}>
+                                  <LineChart data={data}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                                    <XAxis dataKey="day" tick={{ fill: "#71717a", fontSize: 11 }} axisLine={{ stroke: "#3f3f46" }}
+                                      label={{ value: "Day", position: "bottom", fill: "#52525b", fontSize: 11 }} />
+                                    <YAxis tick={{ fill: "#71717a", fontSize: 11 }} axisLine={{ stroke: "#3f3f46" }}
+                                      tickFormatter={(v) => `$${Number(v).toLocaleString()}`} />
+                                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: "12px" }}
+                                      formatter={(v: unknown) => `$${Number(v).toFixed(2)}`} labelFormatter={(l) => `Day ${l}`} />
+                                    {scActivationResult.onlineResults.map((s) => {
+                                      const color = scOffline?.liftCurves.find((x) => x.strategyId === s.strategyId)?.color ?? "#a1a1aa";
+                                      return <Line key={s.strategyId} type="monotone" dataKey={s.strategyId} stroke={color} strokeWidth={2} dot={false} name={s.strategyLabel} />;
+                                    })}
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              );
+                            })()}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Cumulative Value Captured Curve */}
+                  {scComparisonResult.kValues.length > 1 && (
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                      <h4 className="text-sm font-bold text-zinc-200 mb-2">Cumulative Value Captured vs K</h4>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <LineChart>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                          <XAxis dataKey="k" type="number" tick={{ fill: "#71717a", fontSize: 11 }} axisLine={{ stroke: "#3f3f46" }}
+                            label={{ value: "K (users selected)", position: "bottom", fill: "#52525b", fontSize: 11 }} />
+                          <YAxis tick={{ fill: "#71717a", fontSize: 11 }} axisLine={{ stroke: "#3f3f46" }} domain={[0, 1]}
+                            tickFormatter={(v) => `${(Number(v) * 100).toFixed(0)}%`} />
+                          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px", fontSize: "12px" }}
+                            formatter={(v: unknown) => `${(Number(v) * 100).toFixed(1)}%`} />
+                          {scComparisonResult.strategies.map((sid) => {
+                            const data = scComparisonResult.metrics.filter((m) => m.strategyId === sid).map((m) => ({ k: m.k, value: m.cumValueCaptured }));
+                            const color = sid === "model_a" ? "#10b981" : sid === "model_b" ? "#3b82f6" : sid === "model_c" ? "#8b5cf6" : sid === "ltv3d" ? "#f59e0b" : sid === "ltv7d" ? "#ef4444" : "#06b6d4";
+                            return <Line key={sid} data={data} dataKey="value" stroke={color} strokeWidth={2} dot={{ r: 3 }} name={sid} />;
+                          })}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {/* Recall Bar Chart (per strategy at each K) & Strategy Overlap */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                      <h4 className="text-sm font-bold text-zinc-200 mb-2">Recall by Strategy (per K)</h4>
+                      {scComparisonResult.kValues.map((k) => {
+                        const kMetrics = scComparisonResult.metrics.filter((m) => m.k === k);
+                        const maxRecall = Math.max(...kMetrics.map((m) => m.recall), 0.01);
+                        return (
+                          <div key={k} className="mb-3">
+                            <div className="text-[10px] text-zinc-500 mb-1">K = {k} ({(k / scComparisonResult.totalUsers * 100).toFixed(2)}%)</div>
+                            <div className="space-y-0.5">
+                              {kMetrics.sort((a, b) => b.recall - a.recall).map((m) => {
+                                const barColor = m.strategyId === "model_a" ? "bg-emerald-500" : m.strategyId === "model_b" ? "bg-blue-500" : m.strategyId === "model_c" ? "bg-purple-500" : m.strategyId === "ltv3d" ? "bg-amber-500" : m.strategyId === "ltv7d" ? "bg-red-500" : "bg-cyan-500";
+                                return (
+                                  <div key={m.strategyId} className="flex items-center gap-2">
+                                    <span className="text-[10px] text-zinc-400 w-28 truncate">{m.strategyLabel.split(" (")[0]}</span>
+                                    <div className="flex-1 bg-zinc-800 rounded-full h-3 overflow-hidden">
+                                      <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${(m.recall / maxRecall) * 100}%` }} />
+                                    </div>
+                                    <span className="text-[10px] font-mono text-zinc-300 w-12 text-right">{(m.recall * 100).toFixed(1)}%</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                  {/* Overlap Matrix */}
+                  {scComparisonResult.overlapMatrix.length > 0 && scComparisonResult.kValues.length > 0 && (
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                      <h4 className="text-sm font-bold text-zinc-200 mb-2">Strategy Overlap (Jaccard) at K={scComparisonResult.kValues[Math.floor(scComparisonResult.kValues.length / 2)]}</h4>
+                      {(() => {
+                        const midK = scComparisonResult.kValues[Math.floor(scComparisonResult.kValues.length / 2)];
+                        const overlaps = scComparisonResult.overlapMatrix.filter((o) => o.k === midK);
+                        const strats = scComparisonResult.strategies;
+                        return (
+                          <div className="overflow-x-auto">
+                            <table className="text-[11px]">
+                              <thead><tr><th className="px-2 py-1"></th>{strats.map((s) => <th key={s} className="px-2 py-1 text-zinc-400">{s.replace("model_", "M").replace("ltv", "LTV")}</th>)}</tr></thead>
+                              <tbody>
+                                {strats.map((s1) => (
+                                  <tr key={s1}>
+                                    <td className="px-2 py-1 text-zinc-400 font-semibold">{s1.replace("model_", "M").replace("ltv", "LTV")}</td>
+                                    {strats.map((s2) => {
+                                      if (s1 === s2) return <td key={s2} className="px-2 py-1 text-center text-zinc-600">1.000</td>;
+                                      const o = overlaps.find((x) => (x.s1 === s1 && x.s2 === s2) || (x.s1 === s2 && x.s2 === s1));
+                                      const val = o?.jaccard ?? 0;
+                                      return <td key={s2} className={`px-2 py-1 text-center font-mono ${val > 0.7 ? "text-green-400" : val > 0.4 ? "text-amber-400" : "text-red-400"}`}>{val.toFixed(3)}</td>;
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                  </div>
+
+                  {/* Auto Insights Panel */}
+                  {scInsights && (
+                    <div className="bg-zinc-900 border border-emerald-500/20 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-zinc-200 flex items-center gap-2"><Sparkles size={12} className="text-emerald-400" />Auto Insights</h4>
+                        <button onClick={() => navigator.clipboard.writeText(`${scInsights.summary}\n\n${scInsights.bullets.map((b) => `• ${b.text}`).join("\n")}\n\n${scInsights.details}`)}
+                          className="flex items-center gap-1 px-2 py-1 text-[11px] text-emerald-400 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20">Copy</button>
+                      </div>
+                      <p className="text-[12px] text-zinc-300 leading-relaxed">{scInsights.summary}</p>
+                      <div className="space-y-1">
+                        {scInsights.bullets.map((b, i) => (
+                          <div key={i} className={`flex items-start gap-2 text-[12px] ${b.type === "good" ? "text-green-400" : b.type === "warning" ? "text-amber-400" : "text-blue-400"}`}>
+                            {b.type === "good" ? <CheckCircle2 size={11} className="mt-0.5 shrink-0" /> : b.type === "warning" ? <AlertTriangle size={11} className="mt-0.5 shrink-0" /> : <Eye size={11} className="mt-0.5 shrink-0" />}
+                            <span>{b.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Recommendations */}
+                      {scInsights.recommendations.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2">
+                          {scInsights.recommendations.map((rec) => (
+                            <div key={rec.useCase} className="bg-zinc-800/50 rounded-lg p-2.5 border border-zinc-700">
+                              <div className="text-[11px] font-bold text-zinc-300">{rec.useCase}</div>
+                              <div className="text-[11px] text-emerald-400 font-mono">{rec.strategy}</div>
+                              <div className="text-[10px] text-zinc-500">{rec.reason}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Expandable Details */}
+                      <button onClick={() => setScInsightsExpanded((v) => !v)}
+                        className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300">
+                        <ChevronRight size={10} className={`transition-transform ${scInsightsExpanded ? "rotate-90" : ""}`} />
+                        Detailed Breakdown
+                      </button>
+                      {scInsightsExpanded && (
+                        <pre className="bg-zinc-800 rounded-lg p-3 text-[10px] text-zinc-400 font-mono border border-zinc-700 overflow-auto max-h-[300px] whitespace-pre">{scInsights.details}</pre>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-          )}
+          </div>
 
           <div className="flex justify-between">
             <button onClick={() => setActiveStep(5)} className="px-4 py-2 text-base text-zinc-400 hover:text-zinc-200"><ArrowLeft size={14} className="inline mr-1" />Back</button>
-            <button onClick={() => setActiveStep(7)} disabled={!scoringResult} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-base font-semibold rounded-lg hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600">
-              Next: Audiences <ArrowRight size={14} />
+            <button onClick={() => setActiveStep(7)} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-base font-semibold rounded-lg hover:bg-emerald-500">
+              Next: Decisions <ArrowRight size={14} />
             </button>
           </div>
         </div>
       )}
 
-      {/* ═══ Step 7: Audience Building ═══ */}
+      {/* ═══ Step 7: Decision Data Lab ═══ */}
       {activeStep === 7 && (
         <div className="space-y-4">
-          <InfoBanner title="Step 7 — Audience Building" variant="info">
-            <p>Define audience segments from model scores. Each must pass consent checks, min size thresholds, and dedupe + TTL rules.</p>
-          </InfoBanner>
-
-          <div className="space-y-3">
-            {audiences.map((aud) => (
-              <div key={aud.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <h4 className="text-base font-bold text-zinc-200">{aud.name}</h4>
-                    <p className="text-[12px] text-zinc-500">{aud.description}</p>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="text-center">
-                      <div className="text-zinc-500 text-[11px]">Users</div>
-                      <div className="font-bold text-emerald-400">{aud.userCount}</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-zinc-500 text-[11px]">Avg pLTV</div>
-                      <div className="font-bold text-blue-400">${aud.avgPLTV}</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-zinc-500 text-[11px]">Avg Actual</div>
-                      <div className="font-bold text-amber-400">${aud.avgActualLTV}</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-zinc-500 text-[11px]">Est. Match Rate</div>
-                      <div className="font-bold text-purple-400">{aud.matchRate}%</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <code className="text-[11px] px-2 py-1 bg-zinc-800 rounded text-zinc-400 border border-zinc-700">{aud.criteria}</code>
-                  <span className="text-[11px] text-zinc-600">TTL: 30 days</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
+          <DecisionDataLab
+            modelRegistry={modelRegistry}
+            scoringResult={scoringResult}
+            featureRows={featureRows}
+            selectedProblemId={selectedProblemId}
+            selectedModelCategory={selectedModelCategory}
+          />
           <div className="flex justify-between">
-            <button onClick={() => setActiveStep(6)} className="px-4 py-2 text-base text-zinc-400 hover:text-zinc-200">Back</button>
-            <button onClick={() => setActiveStep(8)} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-base font-semibold rounded-lg hover:bg-emerald-500">
-              Next: Ad Platforms <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ Step 8: Ad Platform Push ═══ */}
-      {activeStep === 8 && (
-        <div className="space-y-4">
-          <InfoBanner title="Step 8 — Push to Ad Platforms" variant="info">
-            <p>Two patterns: <strong>Custom Audiences</strong> (seed/retargeting) and <strong>Value-based optimization feeds</strong> (upload predicted value as conversion signal).</p>
-          </InfoBanner>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-sm font-bold text-zinc-200 mb-3 flex items-center gap-2"><Upload size={14} className="text-blue-400" />Custom Audiences</h4>
-              <div className="space-y-2">
-                {audiences.slice(0, 3).map((aud) => (
-                  <div key={aud.id} className="bg-zinc-800/50 rounded p-2.5 border border-zinc-700">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[13px] font-semibold text-zinc-200">{aud.name}</span>
-                      <span className="text-[11px] text-emerald-400">{aud.userCount} users</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      {["Meta", "Google", "TikTok"].map((platform) => (
-                        <span key={platform} className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-400">{platform}</span>
-                      ))}
-                      <span className="text-[10px] text-zinc-600 ml-auto">Match: ~{aud.matchRate}%</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-sm font-bold text-zinc-200 mb-3 flex items-center gap-2"><TrendingUp size={14} className="text-amber-400" />Value-Based Optimization</h4>
-              <div className="space-y-2 text-sm text-zinc-400">
-                <div className="bg-zinc-800/50 rounded p-2.5 border border-zinc-700">
-                  <div className="text-[12px] font-semibold text-zinc-200 mb-1">How it works</div>
-                  <p className="text-[12px] text-zinc-500">Upload pLTV predictions as conversion values. Ad platforms learn to optimize for predicted lifetime value instead of just installs.</p>
-                </div>
-                <div className="bg-amber-500/10 rounded p-2.5 border border-amber-500/20">
-                  <div className="text-[12px] font-semibold text-amber-300 mb-1">Caution</div>
-                  <p className="text-[12px] text-amber-400/80">Must align with platform policies. Overprediction → overbidding → wasted spend. Calibration from Step 5 is critical here.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ROAS Simulation */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-            <h4 className="text-sm font-bold text-zinc-200 mb-2 flex items-center gap-2"><BarChart3 size={14} className="text-cyan-400" />ROAS Simulation by Channel</h4>
-            <div className="overflow-x-auto">
-              <table className="w-full text-[12px]">
-                <thead>
-                  <tr className="border-b border-zinc-800">
-                    <th className="px-3 py-2 text-left text-zinc-500">Channel</th>
-                    <th className="px-3 py-2 text-right text-zinc-500">Installs</th>
-                    <th className="px-3 py-2 text-right text-zinc-500">Est. Spend</th>
-                    <th className="px-3 py-2 text-right text-zinc-500">Pred Revenue</th>
-                    <th className="px-3 py-2 text-right text-zinc-500">Actual Revenue</th>
-                    <th className="px-3 py-2 text-right text-zinc-500">Pred ROAS</th>
-                    <th className="px-3 py-2 text-right text-zinc-500">Actual ROAS</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800/50">
-                  {roasData.map((row) => (
-                    <tr key={row.channel} className="hover:bg-zinc-800/30">
-                      <td className="px-3 py-2 text-zinc-200 font-medium">{row.channel}</td>
-                      <td className="px-3 py-2 text-right text-zinc-300 font-mono">{row.installs}</td>
-                      <td className="px-3 py-2 text-right text-zinc-400 font-mono">${row.spend.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-right text-blue-400 font-mono">${row.predicted_revenue.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-right text-emerald-400 font-mono">${row.actual_revenue.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-right font-mono text-blue-400">{row.predicted_roas}x</td>
-                      <td className="px-3 py-2 text-right font-mono">
-                        <span className={row.actual_roas >= 1 ? "text-green-400" : "text-red-400"}>{row.actual_roas}x</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="flex justify-between">
-            <button onClick={() => setActiveStep(7)} className="px-4 py-2 text-base text-zinc-400 hover:text-zinc-200">Back</button>
-            <button onClick={() => setActiveStep(9)} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-base font-semibold rounded-lg hover:bg-emerald-500">
-              Next: Validation <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ Step 9: Validation Playbook ═══ */}
-      {activeStep === 9 && (
-        <div className="space-y-4">
-          <InfoBanner title="Step 9 — pLTV Validation Playbook (Leakage & Bias Traps)" variant="warning">
-            <p>The most critical step. Bad validation → bad bids → wasted budget. Check every trap below before shipping.</p>
-          </InfoBanner>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Data Splitting */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-sm font-bold text-zinc-200 mb-3 flex items-center gap-2"><Target size={14} className="text-blue-400" />Data Splitting That Matches Reality</h4>
-              <div className="space-y-2 text-[12px] text-zinc-400">
-                <p><strong className="text-zinc-200">Do NOT random-split</strong> if the game changes over time.</p>
-                <div className="bg-zinc-800/50 rounded p-2 border border-zinc-700">
-                  <div className="font-semibold text-zinc-300 mb-1">Use time-based split:</div>
-                  <ul className="space-y-0.5">
-                    <li>Train: Oct–Nov installs</li>
-                    <li>Validate: Dec installs</li>
-                    <li>Test (holdout): Jan installs</li>
-                  </ul>
-                </div>
-                <p>Optionally also <strong className="text-zinc-300">geo-split</strong> to test generalization across markets.</p>
-              </div>
-            </div>
-
-            {/* Leakage Traps */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-sm font-bold text-zinc-200 mb-3 flex items-center gap-2"><AlertTriangle size={14} className="text-red-400" />Leakage Traps</h4>
-              <div className="space-y-1.5">
-                {[
-                  "Using events after t0+7d in features (late-arriving data)",
-                  "Using 'total revenue' fields updated later",
-                  "Using days_since_install computed at extraction time",
-                  "Using labels in features (e.g. payer_by_d60)",
-                  "Using churn computed after the label window",
-                ].map((trap) => (
-                  <div key={trap} className="flex items-start gap-1.5 text-[12px] text-red-400/80">
-                    <span className="text-red-500 mt-0.5 shrink-0">✕</span>
-                    <span>{trap}</span>
-                  </div>
-                ))}
-                <div className="mt-2 bg-red-500/10 rounded p-2 border border-red-500/20 text-[12px] text-red-300">
-                  <strong>Hard rule:</strong> Every feature must be computed with an explicit <code>as_of_time</code>. Enforce via unit tests.
-                </div>
-              </div>
-            </div>
-
-            {/* Bias Traps */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-sm font-bold text-zinc-200 mb-3 flex items-center gap-2"><Eye size={14} className="text-amber-400" />Bias Traps</h4>
-              <div className="space-y-2">
-                {[
-                  { name: "Selection Bias", desc: "UA targeting skews observed users. If UA changes, model breaks.", fix: "Time-split eval + channel mix monitoring + retrain with recent data" },
-                  { name: "Survivorship Bias", desc: "Training only on users who stuck around inflates metrics.", fix: "Include early churners (LTV=0 is a valid label)" },
-                  { name: "Geo/Device Confounding", desc: "Country/device correlates with spend due to pricing.", fix: "Keep features but monitor per-geo calibration" },
-                ].map((bias) => (
-                  <div key={bias.name} className="bg-zinc-800/50 rounded p-2 border border-zinc-700">
-                    <div className="text-[12px] font-semibold text-amber-300">{bias.name}</div>
-                    <div className="text-[11px] text-zinc-500">{bias.desc}</div>
-                    <div className="text-[11px] text-emerald-400/80 mt-0.5">Fix: {bias.fix}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Metrics That Matter */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-sm font-bold text-zinc-200 mb-3 flex items-center gap-2"><BarChart3 size={14} className="text-purple-400" />Metrics That Matter for UA</h4>
-              <div className="space-y-2">
-                <div className="bg-zinc-800/50 rounded p-2 border border-zinc-700">
-                  <div className="text-[12px] font-semibold text-zinc-300">Ranking Metrics</div>
-                  <ul className="text-[11px] text-zinc-500 space-y-0.5 mt-0.5">
-                    <li>• Top-decile lift: actual LTV of top 10% vs average</li>
-                    <li>• Precision@K for high value threshold</li>
-                    <li>• Gains/Lorenz curve</li>
-                  </ul>
-                </div>
-                <div className="bg-zinc-800/50 rounded p-2 border border-zinc-700">
-                  <div className="text-[12px] font-semibold text-zinc-300">Calibration</div>
-                  <ul className="text-[11px] text-zinc-500 space-y-0.5 mt-0.5">
-                    <li>• Predicted vs actual by decile bucket</li>
-                    <li>• <strong className="text-amber-300">Overprediction is dangerous for bidding</strong></li>
-                  </ul>
-                </div>
-                <div className="bg-zinc-800/50 rounded p-2 border border-zinc-700">
-                  <div className="text-[12px] font-semibold text-zinc-300">Business Simulation</div>
-                  <ul className="text-[11px] text-zinc-500 space-y-0.5 mt-0.5">
-                    <li>• If we bid based on pLTV, what ROAS would we expect?</li>
-                    <li>• Evaluate by channel/geo segments</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-between">
-            <button onClick={() => setActiveStep(8)} className="px-4 py-2 text-base text-zinc-400 hover:text-zinc-200">Back</button>
-            <button onClick={() => setActiveStep(10)} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-base font-semibold rounded-lg hover:bg-emerald-500">
-              Next: Closed Loop <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ Step 10: Closed-Loop Learning ═══ */}
-      {activeStep === 10 && (
-        <div className="space-y-4">
-          <InfoBanner title="Step 10 — Closed-Loop Learning" variant="info">
-            <p>Join campaign performance back to scored cohorts. Monitor drift, retrain on triggers. This is what separates a demo from production.</p>
-          </InfoBanner>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-sm font-bold text-zinc-200 mb-3 flex items-center gap-2"><TrendingUp size={14} className="text-emerald-400" />Performance Monitoring</h4>
-              <div className="space-y-2">
-                {[
-                  "Join campaign performance → scored cohorts",
-                  "Track ROAS by audience segment weekly",
-                  "Monitor calibration drift over time",
-                  "Segment stability checks (does top1% stay sensible?)",
-                ].map((item) => (
-                  <div key={item} className="flex items-start gap-1.5 text-[12px] text-zinc-400">
-                    <CheckCircle2 size={10} className="text-emerald-400 mt-0.5 shrink-0" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-sm font-bold text-zinc-200 mb-3 flex items-center gap-2"><AlertTriangle size={14} className="text-amber-400" />Drift Detection</h4>
-              <div className="space-y-2">
-                {[
-                  "Feature distribution shift (PSI per feature)",
-                  "Score distribution shift week over week",
-                  "App version / campaign mix changes vs score",
-                  "\"What changed\" dashboard for stakeholders",
-                ].map((item) => (
-                  <div key={item} className="flex items-start gap-1.5 text-[12px] text-zinc-400">
-                    <AlertTriangle size={10} className="text-amber-400 mt-0.5 shrink-0" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-              <h4 className="text-sm font-bold text-zinc-200 mb-3 flex items-center gap-2"><Zap size={14} className="text-blue-400" />Retrain Strategy</h4>
-              <div className="space-y-2">
-                {[
-                  "Retrain weekly/biweekly or on drift triggers",
-                  "A/B holdout: control (D7 payers) vs test (pLTV top-value including non-payers)",
-                  "Shadow mode first: score but don't act",
-                  "Measure: CPI, ROAS D7/D30, pay rate, ARPPU, retention",
-                ].map((item) => (
-                  <div key={item} className="flex items-start gap-1.5 text-[12px] text-zinc-400">
-                    <Zap size={10} className="text-blue-400 mt-0.5 shrink-0" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 text-sm text-emerald-300">
-            <strong className="text-emerald-200">Online Validation — The Part That Convinces Marketing:</strong>
-            <div className="grid grid-cols-2 gap-4 mt-2">
-              <div>
-                <div className="font-semibold text-emerald-200 mb-1">Shadow Mode (Phase 1)</div>
-                <p className="text-emerald-400/80">Score users but don&apos;t change bidding. Compare model predictions against existing segments. Build confidence in ranking quality.</p>
-              </div>
-              <div>
-                <div className="font-semibold text-emerald-200 mb-1">A/B Holdout (Phase 2)</div>
-                <ul className="text-emerald-400/80 space-y-0.5">
-                  <li>• <strong>Control:</strong> Current lookalike seed (D7 payers)</li>
-                  <li>• <strong>Test:</strong> Predicted top-value (including non-payers with high pLTV)</li>
-                  <li>• Measure: CPI, ROAS D7/D30, pay rate, ARPPU, retention</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-between">
-            <button onClick={() => setActiveStep(9)} className="px-4 py-2 text-base text-zinc-400 hover:text-zinc-200">Back</button>
+            <button onClick={() => setActiveStep(6)} className="px-4 py-2 text-base text-zinc-400 hover:text-zinc-200"><ArrowLeft size={14} className="inline mr-1" />Back to Scoring</button>
             <div className="text-sm text-zinc-500 flex items-center gap-2">
               <Swords size={14} className="text-emerald-400" />
-              <span>End of pLTV Pipeline — <strong className="text-emerald-400">Lineage 2M</strong> style</span>
+              <span>End of pLTV Pipeline — <strong className="text-emerald-400">Decision Data Lab</strong></span>
             </div>
           </div>
         </div>

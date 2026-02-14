@@ -1,0 +1,1182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Decision Lab — pLTV Seeds → Ads Lookalike (Ballistar)</title>
+  <style>
+    :root{
+      --bg:#0b0d12; --muted:#9aa4b2; --text:#e9eef6;
+      --good:#47d18c; --bad:#ff5a7a; --warn:#ffd166; --blue:#7aa2ff;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background: radial-gradient(1200px 600px at 10% 0%, #141a2b 0%, var(--bg) 60%), var(--bg);
+      color:var(--text);
+    }
+    .wrap{ max-width:1200px; margin:0 auto; padding:22px; }
+    h1{ font-size:20px; margin:0 0 10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .grid{ display:grid; grid-template-columns: 440px 1fr; gap:14px; }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:16px; padding:14px; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+    .card h2{
+      font-size:13px; margin:0 0 10px; color:#cfe3ff; letter-spacing:.2px;
+      display:flex; align-items:center; gap:8px;
+    }
+    .row{ display:flex; gap:10px; align-items:center; }
+    .row + .row{ margin-top:10px; }
+    label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
+    select, input[type="number"]{
+      width:100%; background:#0d1220; color:var(--text);
+      border:1px solid rgba(255,255,255,0.10); border-radius:10px; padding:8px 10px; font-size:13px;
+    }
+    input[type="range"]{ width:100%; }
+    button{
+      cursor:pointer; border:1px solid rgba(255,255,255,0.12);
+      background:#0d1220; color:var(--text); border-radius:12px; padding:10px 12px; font-size:13px;
+    }
+    button.primary{
+      background: linear-gradient(180deg, rgba(71,209,140,.25), rgba(71,209,140,.12));
+      border-color: rgba(71,209,140,.35);
+    }
+    button.blue{
+      background: linear-gradient(180deg, rgba(122,162,255,.22), rgba(122,162,255,.10));
+      border-color: rgba(122,162,255,.35);
+    }
+    button:active{ transform: translateY(1px); }
+    button:disabled{ opacity:0.45; cursor:not-allowed; transform:none; }
+
+    .pill{
+      display:inline-flex; padding:2px 8px; border-radius:999px; font-size:11px;
+      border:1px solid rgba(255,255,255,0.12); color:var(--muted);
+    }
+    .pill.good{ color: var(--good); border-color: rgba(71,209,140,.35); background:rgba(71,209,140,.08); }
+    .pill.bad{ color: var(--bad); border-color: rgba(255,90,122,.35); background:rgba(255,90,122,.08); }
+    .pill.warn{ color: var(--warn); border-color: rgba(255,209,102,.35); background:rgba(255,209,102,.08); }
+    .pill.blue{ color: var(--blue); border-color: rgba(122,162,255,.35); background:rgba(122,162,255,.08); }
+
+    .hr{ height:1px; background:rgba(255,255,255,0.08); margin:12px 0; }
+    .small{ font-size:12px; color:var(--muted); line-height:1.5; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; font-size:12px; color:#d8e2f0; }
+
+    .tabs{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 0; }
+    .tab{
+      padding:7px 10px; border-radius:999px; font-size:12px;
+      border:1px solid rgba(255,255,255,0.12); color:var(--muted); background:rgba(0,0,0,0.12);
+    }
+    .tab.active{ color:var(--text); border-color: rgba(207,227,255,.35); background: rgba(207,227,255,.08); }
+
+    canvas{ width:100%; height:260px; background:rgba(0,0,0,0.12); border-radius:16px; border:1px solid rgba(255,255,255,0.08); }
+
+    table{
+      width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; border-radius:14px;
+      border:1px solid rgba(255,255,255,0.08); background:rgba(0,0,0,0.10);
+    }
+    th,td{ padding:10px 10px; font-size:12px; border-bottom:1px solid rgba(255,255,255,0.08); }
+    th{ text-align:left; color:#cfe3ff; background:rgba(255,255,255,0.03); }
+    tr:last-child td{ border-bottom:none; }
+    .right{ text-align:right; }
+
+    .msgBar{
+      margin-top:10px; padding:10px 12px; border-radius:14px;
+      border:1px solid rgba(255,255,255,0.10); background: rgba(0,0,0,0.12);
+      color: var(--muted); font-size:12px; display:none;
+    }
+
+    .modelList{ display:grid; grid-template-columns: 1fr; gap:8px; }
+    .modelItem{
+      display:flex; gap:10px; align-items:flex-start;
+      padding:10px; border-radius:14px; border:1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.12);
+    }
+    .modelItem .meta{ flex:1; }
+    .modelItem .name{ font-size:12px; color:#cfe3ff; display:flex; gap:8px; align-items:center; }
+    .modelItem .desc{ margin-top:4px; font-size:12px; color:var(--muted); line-height:1.35; }
+
+    .seedGrid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .seedBox{
+      padding:10px; border-radius:14px; border:1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.12);
+    }
+    .seedBox .t{ font-size:12px; color:#cfe3ff; display:flex; align-items:center; gap:8px; }
+    .seedBox .d{ margin-top:6px; font-size:12px; color:var(--muted); line-height:1.35; }
+
+    .legend{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .legend span{ display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+    .dot{ width:10px; height:10px; border-radius:99px; display:inline-block; background:#cfe3ff; }
+    .dot.pltv{ background: var(--good); }
+    .dot.ltv7{ background: var(--blue); }
+    .dot.heur{ background: var(--warn); }
+    .dot.rand{ background: rgba(255,255,255,0.55); }
+
+    .contractHeader{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+
+    /* Tooltip */
+    .tip{
+      display:inline-flex; align-items:center; justify-content:center;
+      width:18px; height:18px; border-radius:999px;
+      border:1px solid rgba(255,255,255,0.18);
+      color: rgba(207,227,255,0.85);
+      background: rgba(0,0,0,0.22);
+      font-size:12px; line-height:1; cursor:help;
+      position:relative;
+    }
+    .tip::after{
+      content: attr(data-tip);
+      position:absolute;
+      left:50%; top:24px;
+      transform: translateX(-50%);
+      width: min(380px, 70vw);
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,0.16);
+      background: rgba(10,12,18,0.96);
+      color: rgba(233,238,246,0.92);
+      font-size:12px;
+      line-height:1.45;
+      box-shadow: 0 18px 45px rgba(0,0,0,0.55);
+      white-space: normal;
+      opacity:0;
+      pointer-events:none;
+      z-index:10;
+    }
+    .tip::before{
+      content:"";
+      position:absolute;
+      left:50%; top:18px;
+      transform: translateX(-50%);
+      width:10px; height:10px;
+      background: rgba(10,12,18,0.96);
+      border-left:1px solid rgba(255,255,255,0.16);
+      border-top:1px solid rgba(255,255,255,0.16);
+      transform: translateX(-50%) rotate(45deg);
+      opacity:0;
+      pointer-events:none;
+      z-index:11;
+    }
+    .tip:hover::after, .tip:hover::before{ opacity:1; }
+
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>
+      Decision Lab — pLTV Seeds → Ads Lookalike (Ballistar)
+      <span class="tip" data-tip="Workflow: (1) Train models → select a pLTV model (weak/medium/strong). (2) Choose seed strategies (pLTV/LTV7/heuristic/random) and send to ads network. Simulator is intentionally constructed so STRONG pLTV wins vs baseline offline+online while still having randomness.">i</span>
+    </h1>
+
+    <div class="grid">
+      <!-- LEFT -->
+      <div class="card">
+        <h2>
+          Step 1 — Train pLTV models
+          <span class="tip" data-tip="Training produces 3 pLTV models. Step 2 is locked until you explicitly pick a model. Retrain creates a new training run (new model trio).">i</span>
+        </h2>
+
+        <div class="row">
+          <div style="flex:1">
+            <label>Training run</label>
+            <select id="runSelect"></select>
+          </div>
+          <div style="width:170px">
+            <label>Users</label>
+            <div class="pill" id="pillN">1,000 users</div>
+          </div>
+        </div>
+
+        <div class="modelList" id="modelList"></div>
+
+        <div class="row">
+          <button class="primary" id="retrainBtn">Retrain models</button>
+          <button id="exportBtn">Export JSON</button>
+        </div>
+
+        <div class="msgBar" id="msgBar"></div>
+
+        <div class="hr"></div>
+
+        <h2>
+          Step 2 — Send seed(s) to ads network
+          <span class="tip" data-tip="Pick 1–4 seed strategies and send. Each selected seed becomes a campaign variant and returns its own results. Results are randomized each send and depend on Top-K, but STRONG pLTV stays best.">i</span>
+        </h2>
+
+        <div class="row">
+          <div style="flex:1">
+            <label>Top-K % (for all seeds)</label>
+            <input id="topk" type="number" min="1" max="50" value="5" />
+          </div>
+          <div style="flex:1">
+            <label>Budget per seed ($)</label>
+            <input id="budget" type="number" min="1000" step="500" value="20000" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div style="flex:1">
+            <label>Base CPI ($)</label>
+            <input id="baseCpi" type="number" min="0.2" step="0.1" value="1.6" />
+          </div>
+          <div style="flex:1">
+            <label>Ads sensitivity <span class="pill" id="sensPill">medium</span></label>
+            <input id="sensitivity" type="range" min="0" max="100" value="60" />
+          </div>
+        </div>
+
+        <div class="seedGrid">
+          <div class="seedBox">
+            <div class="t"><input type="checkbox" id="seedPLTV" checked /> <span class="pill good">pLTV</span></div>
+            <div class="d">Top-K by selected pLTV model.</div>
+          </div>
+          <div class="seedBox">
+            <div class="t"><input type="checkbox" id="seedLTV7" checked /> <span class="pill blue">LTV7</span></div>
+            <div class="d">Top-K by LTV7 (baseline).</div>
+          </div>
+          <div class="seedBox">
+            <div class="t"><input type="checkbox" id="seedHeur" /> <span class="pill warn">Heuristic</span></div>
+            <div class="d">Rule ranking (engagement × spend).</div>
+          </div>
+          <div class="seedBox">
+            <div class="t"><input type="checkbox" id="seedRand" /> <span class="pill">Random</span></div>
+            <div class="d">Sanity check.</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <button class="blue" id="sendBtn">Send selected seeds</button>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="card">
+        <div class="row" style="justify-content:space-between;">
+          <h2 style="margin:0">
+            Outputs
+            <span class="tip" data-tip="Offline = pre-ads seed quality (lift, precision). Online = post-ads outcomes (CPI/ROAS/profit) and activation contract tracking.">i</span>
+          </h2>
+          <div class="tabs">
+            <div class="tab active" data-tab="overview">Offline</div>
+            <div class="tab" data-tab="online">Online</div>
+            <div class="tab" data-tab="data">Data</div>
+          </div>
+        </div>
+
+        <!-- OFFLINE -->
+        <div id="panel-overview">
+          <div class="hr"></div>
+          <h2>Offline lift curve</h2>
+          <canvas id="liftCanvas" width="1000" height="320"></canvas>
+          <div class="legend">
+            <span><i class="dot pltv"></i> pLTV</span>
+            <span><i class="dot ltv7"></i> LTV7</span>
+            <span><i class="dot heur"></i> Heuristic</span>
+            <span><i class="dot rand"></i> Random</span>
+          </div>
+
+          <div class="hr"></div>
+          <h2>Offline seed quality (@ Top-K)</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Ranking</th>
+                <th class="right">Revenue captured</th>
+                <th class="right">Precision@K (whales)</th>
+                <th class="right">Spearman</th>
+              </tr>
+            </thead>
+            <tbody id="offlineTable"></tbody>
+          </table>
+          <div class="small" style="margin-top:10px;" id="offlineNote"></div>
+        </div>
+
+        <!-- ONLINE -->
+        <div id="panel-online" style="display:none">
+          <div class="hr"></div>
+
+          <div class="contractHeader">
+            <h2 style="margin:0">Activation contract</h2>
+            <div class="small mono" id="contractRunMeta">—</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Seed variant</th>
+                <th>Status</th>
+                <th class="right">Sent at</th>
+                <th class="right">Result at</th>
+              </tr>
+            </thead>
+            <tbody id="contractTable"></tbody>
+          </table>
+
+          <div class="hr"></div>
+
+          <h2>Activation results</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Seed</th>
+                <th class="right">Budget</th>
+                <th class="right">CPI</th>
+                <th class="right">Installs</th>
+                <th class="right">Revenue (D90)</th>
+                <th class="right">ROAS</th>
+                <th class="right">Profit</th>
+              </tr>
+            </thead>
+            <tbody id="onlineTable"></tbody>
+          </table>
+
+          <div class="hr"></div>
+          <h2>Revenue curve (D0 → D90)</h2>
+          <canvas id="curveCanvas" width="1000" height="320"></canvas>
+        </div>
+
+        <!-- DATA -->
+        <div id="panel-data" style="display:none">
+          <div class="hr"></div>
+          <h2>Sample dataset (first 25 users)</h2>
+          <div class="small">Columns: <span class="mono">user_id, ltv7, ltv90_actual, pltv_pred(selected), heuristic_score, whale90</span></div>
+          <div style="margin-top:10px; max-height:420px; overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>user_id</th>
+                  <th class="right">LTV7</th>
+                  <th class="right">LTV90</th>
+                  <th class="right">pLTV</th>
+                  <th class="right">heur</th>
+                  <th class="right">whale90</th>
+                </tr>
+              </thead>
+              <tbody id="dataTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+<script>
+/* =========================================================
+   Changes per request:
+   1) Move explanatory text into tooltips: done (ⓘ icons).
+   2) More realistic curves (offline + online) while keeping STRONG pLTV best:
+      - Offline: introduce heterogeneous segments + piecewise mixing so lift curves differ more.
+      - Online: per-seed curve uses varied growth rate + early/late shape + jitter (still monotonic).
+   3) Online curves/results work for any Top-K (user input); results randomized each SEND,
+      while STRONG pLTV remains best (soft safeguard).
+   ========================================================= */
+
+const $ = (id)=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmtMoney = (x)=>"$" + (x||0).toLocaleString(undefined,{maximumFractionDigits:0});
+const fmtMoney2 = (x)=>"$" + (x||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtPct = (x)=> (x*100).toFixed(1) + "%";
+const fmtTime = (ms)=> new Date(ms).toLocaleString();
+
+function mulberry32(seed){
+  return function() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+}
+function randn(rng){
+  let u=0,v=0; while(u===0)u=rng(); while(v===0)v=rng();
+  return Math.sqrt(-2.0*Math.log(u))*Math.cos(2.0*Math.PI*v);
+}
+function quantile(arr,q){
+  const a=[...arr].sort((x,y)=>x-y);
+  const pos=(a.length-1)*q, base=Math.floor(pos), rest=pos-base;
+  return a[base+1]!==undefined ? a[base]+rest*(a[base+1]-a[base]) : a[base];
+}
+function showMsg(html, kind="info"){
+  const bar = $("msgBar");
+  bar.style.display="block";
+  bar.innerHTML = html;
+  bar.style.borderColor = kind==="ok" ? "rgba(71,209,140,.25)" : "rgba(255,255,255,0.10)";
+  bar.style.background = kind==="ok" ? "rgba(71,209,140,.07)" : "rgba(0,0,0,0.12)";
+  bar.style.color = kind==="ok" ? "rgba(71,209,140,0.95)" : "var(--muted)";
+}
+function setSensitivityPill(v){
+  const pill = $("sensPill");
+  if(v<0.33){ pill.textContent="low"; pill.className="pill"; }
+  else if(v<0.66){ pill.textContent="medium"; pill.className="pill warn"; }
+  else { pill.textContent="high"; pill.className="pill good"; }
+}
+
+let N = 1000;
+let users = [];
+
+let trainingRuns = []; // {id, createdAt, seed, models:{weak,medium,strong}, selectedModelKey:null|...}
+let activeRunId = null;
+let runCounter = 1;
+
+let modelChosen = false;
+
+// online state
+let lastContract = [];
+let lastOnlineResults = [];
+let lastSendNonce = null; // changes every send to randomize outcomes
+
+/* --------- Dataset: more heterogeneous segments (realism) --------- */
+function generateDataset(seed=1337){
+  const rng = mulberry32(seed);
+  users = [];
+
+  for(let i=0;i<N;i++){
+    // segment: affects how value accrues and what signals correlate
+    // 0 = impulse spenders, 1 = grinders, 2 = social late bloomers
+    const segRoll = rng();
+    const segment = segRoll < 0.36 ? 0 : (segRoll < 0.72 ? 1 : 2);
+
+    const latent = 0.9*randn(rng) + (rng()<0.10 ? 2.2 + 0.6*randn(rng) : 0);
+
+    // early proxies differ by segment
+    const engagementBase = segment===1 ? 0.58 : (segment===2 ? 0.52 : 0.45);
+    const spendBase = segment===0 ? 0.48 : (segment===2 ? 0.30 : 0.34);
+
+    const engagement = clamp(engagementBase + 0.18*randn(rng) + 0.12*(latent>1.0), 0, 1);
+    const earlySpendProxy = clamp(spendBase + 0.22*randn(rng) + 0.18*(latent>0.8), 0, 1);
+
+    // lateSignal: strongest in segment 2 (social late bloomers), moderate in segment 1, weakest in segment 0
+    const lateSignalBase = segment===2 ? 0.40 : (segment===1 ? 0.30 : 0.18);
+    const lateSignal = clamp(
+      lateSignalBase
+      + 0.55*(latent>1.0)
+      + 0.22*engagement
+      - 0.55*earlySpendProxy
+      + 0.16*randn(rng),
+      0, 1
+    );
+
+    // TRUE LTV90: dominated by lateSignal; segment weights differ => more realistic spread
+    const segLateW = segment===2 ? 135 : (segment===1 ? 115 : 90);
+    const segEngW  = segment===1 ? 30 : 22;
+    const segSpendW= segment===0 ? 20 : 10;
+
+    const ltv90 = Math.max(0,
+      5
+      + segLateW*lateSignal
+      + segEngW*engagement
+      + segSpendW*earlySpendProxy
+      + 4*randn(rng) // small noise
+    );
+
+    // LTV7 baseline: early proxy; segment 2 is intentionally under-captured
+    const segSpend7 = segment===0 ? 22 : 16;
+    const segEng7   = segment===1 ? 14 : 10;
+    const segPenalty= segment===2 ? 6 : 0; // late bloomers look worse early
+
+    const ltv7 = Math.max(0,
+      2
+      + segSpend7*earlySpendProxy
+      + segEng7*engagement
+      - segPenalty*(lateSignal>0.55 ? 1 : 0)
+      + 6*randn(rng)
+    );
+
+    const heuristic_score = (0.70*engagement + 0.30*earlySpendProxy)*100;
+
+    users.push({
+      user_id: "U"+String(i+1).padStart(5,"0"),
+      segment,
+      engagement, earlySpendProxy, lateSignal,
+      ltv7,
+      ltv90_actual: ltv90,
+      heuristic_score,
+      whale90: 0,
+      pltv_pred: NaN
+    });
+  }
+
+  const whaleCut = quantile(users.map(u=>u.ltv90_actual), 0.90);
+  users.forEach(u=>u.whale90 = (u.ltv90_actual>=whaleCut) ? 1 : 0);
+
+  $("pillN").textContent = `${N.toLocaleString()} users`;
+}
+
+/* --------- Train models: stronger separation + realism --------- */
+function trainThreeModels(runSeed){
+  const rngW = mulberry32(runSeed + 101);
+  const rngM = mulberry32(runSeed + 202);
+  const rngS = mulberry32(runSeed + 303);
+
+  // weak: mostly early proxies + more noise
+  const weak = users.map(u=>{
+    const proxy = 0.55*u.engagement + 0.45*u.earlySpendProxy + 0.05*(u.segment===0 ? 1 : 0);
+    return Math.max(0, (proxy + 0.30*randn(rngW))*85);
+  });
+
+  // medium: mixes lateSignal but not perfect + moderate noise
+  const medium = users.map(u=>{
+    const proxy = 0.42*u.engagement + 0.28*u.earlySpendProxy + 0.42*u.lateSignal + 0.04*(u.segment===2 ? 1 : 0);
+    return Math.max(0, (proxy + 0.15*randn(rngM))*92);
+  });
+
+  // strong: aligns with lateSignal (dominant true driver) + tiny noise
+  const strong = users.map(u=>{
+    const proxy = 1.15*u.lateSignal + 0.10*u.engagement + 0.03*u.earlySpendProxy + 0.03*(u.segment===2 ? 1 : 0);
+    return Math.max(0, (proxy + 0.01*randn(rngS))*105);
+  });
+
+  return { weak, medium, strong };
+}
+
+function applyModelPredictions(predArray){
+  for(let i=0;i<users.length;i++) users[i].pltv_pred = predArray[i];
+}
+
+/* --------- Ranking & Offline metrics --------- */
+function rankUsers(metric, rngForRandom=null){
+  const arr = [...users];
+  if(metric==="pltv") arr.sort((a,b)=>(b.pltv_pred - a.pltv_pred));
+  else if(metric==="ltv7") arr.sort((a,b)=>b.ltv7 - a.ltv7);
+  else if(metric==="heur") arr.sort((a,b)=>b.heuristic_score - a.heuristic_score);
+  else if(metric==="rand"){
+    const r = rngForRandom || Math.random;
+    for(let i=arr.length-1;i>0;i--){
+      const j = Math.floor(r()*(i+1));
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+  }
+  return arr;
+}
+
+function offlineMetrics(metric, topKpct){
+  const K = Math.max(1, Math.floor(N*(topKpct/100)));
+  if(metric==="pltv" && !modelChosen){
+    return { metric, K, revCaptured: null, precisionK: null, spearman: null };
+  }
+  const rng = mulberry32(9999);
+  const ranked = rankUsers(metric, metric==="rand" ? rng : null);
+  const top = ranked.slice(0,K);
+
+  const totalRev = users.reduce((s,u)=>s+u.ltv90_actual,0);
+  const topRev = top.reduce((s,u)=>s+u.ltv90_actual,0);
+  const revCaptured = topRev / totalRev;
+
+  const whalesInTop = top.reduce((s,u)=>s+u.whale90,0);
+  const precisionK = whalesInTop / K;
+
+  // spearman vs true rank
+  const metricRank = new Map();
+  ranked.forEach((u, idx)=>metricRank.set(u.user_id, idx+1));
+  const actualRanked = [...users].sort((a,b)=>b.ltv90_actual - a.ltv90_actual);
+  const actualRank = new Map();
+  actualRanked.forEach((u, idx)=>actualRank.set(u.user_id, idx+1));
+  let sumd2 = 0;
+  for(const u of users){
+    const d = (metricRank.get(u.user_id) - actualRank.get(u.user_id));
+    sumd2 += d*d;
+  }
+  const n = users.length;
+  const spearman = 1 - (6*sumd2)/(n*(n*n-1));
+
+  return { metric, K, revCaptured, precisionK, spearman };
+}
+
+function liftCurve(metric, steps=20){
+  if(metric==="pltv" && !modelChosen) return null;
+
+  const rng = mulberry32(4242);
+  const ranked = rankUsers(metric, metric==="rand" ? rng : null);
+
+  const totalRev = users.reduce((s,u)=>s+u.ltv90_actual,0);
+
+  // Add slight "measurement noise" to look more realistic without changing ordering too much:
+  // we mix in a tiny segment-dependent curve shape to avoid near-parallel lines.
+  const segMix = (metric==="pltv") ? 0.00 : (metric==="ltv7" ? 0.02 : (metric==="heur" ? 0.03 : 0.04));
+
+  const points = [];
+  for(let i=1;i<=steps;i++){
+    const pct = i/steps;
+    const cut = Math.max(1, Math.floor(N*pct));
+    const top = ranked.slice(0,cut);
+
+    let topRev = 0;
+    for(const u of top){
+      const segAdj = (u.segment===2 ? 1.0+segMix : (u.segment===0 ? 1.0-segMix : 1.0));
+      topRev += u.ltv90_actual * segAdj;
+    }
+    points.push({ x:pct, y: clamp(topRev/totalRev, 0, 1) });
+  }
+  return points;
+}
+
+/* --------- Online simulation: more varied curves + randomness per send --------- */
+function makeCumulativeCurve(revenue90, curveSeed, style){
+  // style: {k, earlyBias, jitter}
+  const rng = mulberry32(curveSeed);
+
+  // days 0..90
+  const pts = [];
+  let prev = 0;
+
+  for(let d=0; d<=90; d+=3){
+    const t = d/90;
+
+    // Base curve: flexible saturation family
+    // earlyBias > 0 speeds early revenue; <0 delays revenue
+    const k = style.k; // 1.3..3.2
+    const bias = style.earlyBias; // -0.25..+0.25
+    const tt = clamp(t + bias*(t*(1-t)), 0, 1);
+
+    const denom = 1 - Math.exp(-k);
+    let cum = (1 - Math.exp(-k*tt)) / denom;
+
+    // add small jitter but keep monotonic
+    const j = style.jitter * (0.6 + 0.4*(1-tt)) * randn(rng); // more jitter early
+    cum = clamp(cum + j, 0, 1);
+
+    const y = Math.max(prev, revenue90 * cum);
+    prev = y;
+    pts.push({ day:d, revenue:y });
+  }
+
+  // ensure last point hits revenue90
+  pts[pts.length-1].revenue = revenue90;
+  return pts;
+}
+
+function simulateOnline(metricKey, topKpct, budget, baseCpi, sensitivity, activeModelKind, sendNonce){
+  if(metricKey==="pltv" && !modelChosen) return null;
+
+  const off = offlineMetrics(metricKey, topKpct);
+  const base = offlineMetrics("ltv7", topKpct);
+
+  const sens = sensitivity;
+  const delta = (off.revCaptured - base.revCaptured);
+
+  // RNG: changes every send (sendNonce), every K, every seed
+  const seedBase =
+    (sendNonce || Date.now()) ^
+    (activeRunId * 2654435761) ^
+    (Math.floor(topKpct*1000) * 97531) ^
+    (metricKey.charCodeAt(0) * 99991);
+
+  const rng = mulberry32(seedBase);
+
+  // Platform randomness
+  // Strong pLTV keeps advantage: reduce variance slightly and boost mean.
+  const isStrongPLTV = (metricKey==="pltv" && activeModelKind==="strong");
+  const noiseScale = isStrongPLTV ? 0.03 : 0.08;
+  const platformNoise = noiseScale * randn(rng);
+
+  // ROAS/CPI response
+  const roasBoost = 1 + sens*(1.65*delta) + platformNoise + (isStrongPLTV ? 0.04 : 0.0);
+  const cpiBoost  = 1 - sens*(0.55*delta) + (0.04*randn(rng)) + (isStrongPLTV ? -0.01 : 0.0);
+
+  const cpi = clamp(baseCpi * cpiBoost, baseCpi*0.55, baseCpi*1.70);
+  const installs = Math.floor(budget / cpi);
+
+  // RPI varies by seed quality + randomness
+  const baseRPI = 6.6 + 0.4*rng(); // some day-to-day variation
+  const rpi = clamp(baseRPI * roasBoost, 3.0, 14.0);
+
+  const revenue90 = installs * rpi;
+  const roas = revenue90 / budget;
+  const profit = revenue90 - budget;
+
+  // Curve style varies per seed strategy (for realism)
+  const style = (() => {
+    // baseline tends to monetize steadily; random tends to be weaker & noisier
+    let k = 2.0 + 0.6*rng();
+    let earlyBias = (rng()-0.5)*0.25;
+    let jitter = 0.02 + 0.02*rng();
+
+    if(metricKey==="pltv") { k += 0.35; earlyBias += 0.06; jitter *= 0.9; }
+    if(metricKey==="ltv7") { k += 0.10; earlyBias += 0.02; }
+    if(metricKey==="heur") { k -= 0.05; earlyBias -= 0.01; }
+    if(metricKey==="rand") { k -= 0.25; earlyBias -= 0.05; jitter *= 1.2; }
+
+    // Strong model: slightly faster early payback, smoother curve
+    if(isStrongPLTV){ k += 0.35; earlyBias += 0.08; jitter *= 0.7; }
+
+    return { k: clamp(k, 1.2, 3.4), earlyBias: clamp(earlyBias, -0.25, 0.25), jitter: clamp(jitter, 0.005, 0.05) };
+  })();
+
+  const curveSeed = seedBase ^ 0xABCDEF;
+  const curve = makeCumulativeCurve(revenue90, curveSeed, style);
+
+  return { key: metricKey, offline: off, budget, cpi, installs, revenue90, roas, profit, curve };
+}
+
+/* --------- Charts --------- */
+function drawChart(canvas, series, options){
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  const padL=50, padR=18, padT=16, padB=34;
+  const x0=padL, y0=H-padB, x1=W-padR, y1=padT;
+
+  ctx.strokeStyle="rgba(255,255,255,0.18)";
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(x0,y0); ctx.lineTo(x1,y0);
+  ctx.moveTo(x0,y0); ctx.lineTo(x0,y1);
+  ctx.stroke();
+
+  ctx.font="12px ui-sans-serif";
+  const yTicks=5;
+  for(let i=0;i<=yTicks;i++){
+    const t=i/yTicks;
+    const y = y0 - t*(y0-y1);
+    ctx.strokeStyle="rgba(255,255,255,0.08)";
+    ctx.beginPath(); ctx.moveTo(x0,y); ctx.lineTo(x1,y); ctx.stroke();
+    const val = options.yMin + t*(options.yMax-options.yMin);
+    ctx.fillStyle="rgba(255,255,255,0.45)";
+    ctx.fillText(options.yFmt(val), 8, y+4);
+  }
+  const xTicks=5;
+  for(let i=0;i<=xTicks;i++){
+    const t=i/xTicks;
+    const x = x0 + t*(x1-x0);
+    ctx.strokeStyle="rgba(255,255,255,0.08)";
+    ctx.beginPath(); ctx.moveTo(x,y0); ctx.lineTo(x,y1); ctx.stroke();
+    const val = options.xMin + t*(options.xMax-options.xMin);
+    ctx.fillStyle="rgba(255,255,255,0.45)";
+    ctx.fillText(options.xFmt(val), x-10, H-10);
+  }
+
+  if(options.title){
+    ctx.fillStyle="rgba(207,227,255,0.9)";
+    ctx.font="13px ui-sans-serif";
+    ctx.fillText(options.title, x0, 14);
+  }
+
+  series.forEach(s=>{
+    ctx.strokeStyle=s.color;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    s.data.forEach((p, idx)=>{
+      const x = x0 + (p.x-options.xMin)/(options.xMax-options.xMin) * (x1-x0);
+      const y = y0 - (p.y-options.yMin)/(options.yMax-options.yMin) * (y0-y1);
+      if(idx===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+
+    const lastP = s.data[s.data.length-1];
+    const ex = x0 + (lastP.x-options.xMin)/(options.xMax-options.xMin) * (x1-x0);
+    const ey = y0 - (lastP.y-options.yMin)/(options.yMax-options.yMin) * (y0-y1);
+    ctx.fillStyle=s.color;
+    ctx.beginPath(); ctx.arc(ex,ey,3.2,0,Math.PI*2); ctx.fill();
+  });
+
+  ctx.fillStyle="rgba(255,255,255,0.55)";
+  ctx.font="12px ui-sans-serif";
+  ctx.fillText(options.xLabel||"", (x0+x1)/2 - 60, H-6);
+  ctx.save();
+  ctx.translate(14,(y0+y1)/2 + 30);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText(options.yLabel||"", 0, 0);
+  ctx.restore();
+}
+
+/* --------- UI helpers --------- */
+function humanLabel(metricKey){
+  if(metricKey==="pltv") return "pLTV (selected)";
+  if(metricKey==="ltv7") return "LTV7 (baseline)";
+  if(metricKey==="heur") return "Heuristic";
+  if(metricKey==="rand") return "Random";
+  return metricKey;
+}
+function metricPill(metricKey){
+  if(metricKey==="pltv") return `<span class="pill good">pLTV</span>`;
+  if(metricKey==="ltv7") return `<span class="pill blue">LTV7</span>`;
+  if(metricKey==="heur") return `<span class="pill warn">Heuristic</span>`;
+  if(metricKey==="rand") return `<span class="pill">Random</span>`;
+  return `<span class="pill">${metricKey}</span>`;
+}
+function setTab(tab){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.tab===tab));
+  $("panel-overview").style.display = (tab==="overview") ? "" : "none";
+  $("panel-online").style.display   = (tab==="online") ? "" : "none";
+  $("panel-data").style.display     = (tab==="data") ? "" : "none";
+}
+function setStep2Enabled(enabled){
+  modelChosen = enabled;
+  ["topk","budget","baseCpi","sensitivity","seedPLTV","seedLTV7","seedHeur","seedRand","sendBtn"].forEach(id=>{
+    $(id).disabled = !enabled;
+  });
+}
+
+/* --------- Rendering --------- */
+function renderRunsSelect(){
+  const sel = $("runSelect");
+  sel.innerHTML = trainingRuns.map(r=>{
+    const dt = new Date(r.createdAt);
+    return `<option value="${r.id}">Run #${r.id} • ${dt.toLocaleString()} • seed ${r.seed}</option>`;
+  }).join("");
+  sel.value = String(activeRunId);
+}
+
+function renderModelList(){
+  const run = trainingRuns.find(r=>r.id===activeRunId);
+  function modelRow(key, pill, desc){
+    const checked = (run.selectedModelKey===key) ? "checked" : "";
+    return `
+      <div class="modelItem">
+        <input type="radio" name="modelRadio" value="${key}" ${checked} />
+        <div class="meta">
+          <div class="name">${pill} <b>${key.toUpperCase()}</b></div>
+          <div class="desc">${desc}</div>
+        </div>
+      </div>
+    `;
+  }
+  $("modelList").innerHTML = [
+    modelRow("weak",   `<span class="pill bad">Weak</span>`,   "Early-proxy heavy; higher noise."),
+    modelRow("medium", `<span class="pill warn">Medium</span>`, "Adds late-signal; moderate noise."),
+    modelRow("strong", `<span class="pill good">Strong</span>`, "Late-signal aligned; best performance.")
+  ].join("");
+
+  document.querySelectorAll('input[name="modelRadio"]').forEach(r=>{
+    r.addEventListener("change", (e)=>{
+      const key = e.target.value;
+      run.selectedModelKey = key;
+
+      applyModelPredictions(run.models[key]);
+      setStep2Enabled(true);
+
+      // invalidate online (because model changed)
+      lastContract = [];
+      lastOnlineResults = [];
+      renderContractTable();
+      renderOnlineEmpty();
+
+      renderAllOffline();
+      renderDataTable();
+
+      showMsg(`✅ Selected model: <b>${key.toUpperCase()}</b> (Run #${run.id}). Step 2 unlocked.`, "ok");
+    });
+  });
+}
+
+function renderAllOffline(){
+  const topKpct = clamp(parseFloat($("topk").value||5), 1, 50);
+
+  const pltv = liftCurve("pltv");
+  const ltv7 = liftCurve("ltv7");
+  const heur = liftCurve("heur");
+  const rand = liftCurve("rand");
+
+  const series = [
+    ...(pltv ? [{ color:"rgba(71,209,140,0.95)", data: pltv }] : []),
+    { color:"rgba(122,162,255,0.95)", data: ltv7 },
+    { color:"rgba(255,204,102,0.95)", data: heur },
+    { color:"rgba(255,255,255,0.60)", data: rand }
+  ];
+
+  drawChart($("liftCanvas"), series, {
+    xMin:0, xMax:1, yMin:0, yMax:1,
+    xFmt:(v)=>Math.round(v*100)+"%",
+    yFmt:(v)=>Math.round(v*100)+"%",
+    xLabel:"Top % of users selected",
+    yLabel:"% of total D90 revenue captured",
+    title:"Offline lift curve (pre-ads)"
+  });
+
+  const rows = ["pltv","ltv7","heur","rand"].map(m=>offlineMetrics(m, topKpct));
+  $("offlineTable").innerHTML = rows.map(r=>{
+    const tag = (r.metric==="pltv") ? `<span class="pill good" style="margin-left:6px">model</span>`
+              : (r.metric==="ltv7") ? `<span class="pill blue" style="margin-left:6px">baseline</span>`
+              : (r.metric==="heur") ? `<span class="pill warn" style="margin-left:6px">benchmark</span>`
+              : `<span class="pill" style="margin-left:6px">sanity</span>`;
+    const v = (x)=> (x==null ? "—" : fmtPct(x));
+    const s = (x)=> (x==null ? "—" : x.toFixed(2));
+    return `
+      <tr>
+        <td>${humanLabel(r.metric)} ${tag}</td>
+        <td class="right">${v(r.revCaptured)}</td>
+        <td class="right">${v(r.precisionK)}</td>
+        <td class="right">${s(r.spearman)}</td>
+      </tr>
+    `;
+  }).join("");
+
+  if(!modelChosen){
+    $("offlineNote").innerHTML = `Select a model to compute <b>pLTV</b> offline metrics.`;
+  } else {
+    const p = rows.find(x=>x.metric==="pltv");
+    const b = rows.find(x=>x.metric==="ltv7");
+    const d = (p.revCaptured - b.revCaptured);
+    const run = trainingRuns.find(r=>r.id===activeRunId);
+    $("offlineNote").innerHTML =
+      `Top-K = <b>${p.K.toLocaleString()}</b> • model = <b>${run.selectedModelKey.toUpperCase()}</b> •
+       pLTV vs baseline lift @K: <span class="pill ${d>=0?'good':'bad'}">${(d>=0?'+':'')}${fmtPct(d)}</span>`;
+  }
+}
+
+function renderDataTable(){
+  $("dataTable").innerHTML = users.slice(0,25).map(u=>`
+    <tr>
+      <td class="mono">${u.user_id}</td>
+      <td class="right">${u.ltv7.toFixed(1)}</td>
+      <td class="right">${u.ltv90_actual.toFixed(1)}</td>
+      <td class="right">${(isNaN(u.pltv_pred) ? "—" : u.pltv_pred.toFixed(1))}</td>
+      <td class="right">${u.heuristic_score.toFixed(1)}</td>
+      <td class="right">${u.whale90 ? '<span class="pill good">1</span>' : '<span class="pill">0</span>'}</td>
+    </tr>
+  `).join("");
+}
+
+/* --------- Online contract + rendering --------- */
+function getSelectedSeedKeys(){
+  const keys=[];
+  if($("seedPLTV").checked) keys.push("pltv");
+  if($("seedLTV7").checked) keys.push("ltv7");
+  if($("seedHeur").checked) keys.push("heur");
+  if($("seedRand").checked) keys.push("rand");
+  return keys;
+}
+function renderContractTable(){
+  if(lastContract.length===0){
+    $("contractTable").innerHTML = `<tr><td colspan="4" class="small" style="color:var(--muted);">No contract yet. Click <b>Send selected seeds</b>.</td></tr>`;
+    return;
+  }
+  const statusPill = (s)=>{
+    if(s==="SENT") return `<span class="pill blue">SENT</span>`;
+    if(s==="RESULTS_RECEIVED") return `<span class="pill good">RESULTS_RECEIVED</span>`;
+    return `<span class="pill">${s}</span>`;
+  };
+  $("contractTable").innerHTML = lastContract.map(c=>`
+    <tr>
+      <td>${metricPill(c.key)} ${humanLabel(c.key)}</td>
+      <td>${statusPill(c.status)}</td>
+      <td class="right mono">${c.sentAt ? fmtTime(c.sentAt) : "—"}</td>
+      <td class="right mono">${c.resultAt ? fmtTime(c.resultAt) : "—"}</td>
+    </tr>
+  `).join("");
+}
+function renderOnlineEmpty(){
+  $("onlineTable").innerHTML = `<tr><td colspan="7" class="small" style="color:var(--muted);">No activation results yet. Click <b>Send selected seeds</b>.</td></tr>`;
+  drawChart($("curveCanvas"), [], {
+    xMin:0, xMax:90, yMin:0, yMax:1,
+    xFmt:(v)=>v, yFmt:(v)=>v,
+    xLabel:"Days since install", yLabel:"Cumulative revenue",
+    title:"Online revenue curve (post-ads) — waiting for results"
+  });
+}
+function renderOnlineResults(results){
+  $("onlineTable").innerHTML = results.map(r=>{
+    const roasCls = r.roas>=1 ? "good" : "bad";
+    const profCls = r.profit>=0 ? "good" : "bad";
+    return `
+      <tr>
+        <td>${metricPill(r.key)} ${humanLabel(r.key)}</td>
+        <td class="right">${fmtMoney(r.budget)}</td>
+        <td class="right">${fmtMoney2(r.cpi)}</td>
+        <td class="right">${r.installs.toLocaleString()}</td>
+        <td class="right">${fmtMoney(r.revenue90)}</td>
+        <td class="right"><span class="pill ${roasCls}">${r.roas.toFixed(2)}x</span></td>
+        <td class="right"><span class="pill ${profCls}">${fmtMoney(r.profit)}</span></td>
+      </tr>
+    `;
+  }).join("");
+
+  const maxRev = Math.max(...results.map(r=>r.revenue90), 1);
+  const palette = {
+    pltv:"rgba(71,209,140,0.95)",
+    ltv7:"rgba(122,162,255,0.95)",
+    heur:"rgba(255,204,102,0.95)",
+    rand:"rgba(255,255,255,0.60)"
+  };
+  const series = results.map(r=>({
+    color: palette[r.key] || "rgba(207,227,255,0.9)",
+    data: r.curve.map(p=>({x:p.day, y:p.revenue}))
+  }));
+
+  drawChart($("curveCanvas"), series, {
+    xMin:0, xMax:90, yMin:0, yMax:maxRev,
+    xFmt:(v)=>v,
+    yFmt:(v)=>"$"+Math.round(v/1000)+"k",
+    xLabel:"Days since install",
+    yLabel:"Cumulative revenue",
+    title:"Online revenue accumulation (post-ads) — per seed"
+  });
+}
+
+/* --------- Run mgmt --------- */
+function addTrainingRun(runSeed){
+  const models = trainThreeModels(runSeed);
+  const id = runCounter++;
+  const run = { id, createdAt: Date.now(), seed: runSeed, models, selectedModelKey: null };
+  trainingRuns.unshift(run);
+  activeRunId = id;
+  return run;
+}
+
+function setActiveRun(id){
+  activeRunId = id;
+  const run = trainingRuns.find(r=>r.id===activeRunId);
+
+  // lock step2; clear pLTV
+  setStep2Enabled(false);
+  users.forEach(u=>u.pltv_pred = NaN);
+
+  // invalidate online
+  lastContract = [];
+  lastOnlineResults = [];
+  lastSendNonce = null;
+
+  renderRunsSelect();
+  renderModelList();
+  renderAllOffline();
+  renderDataTable();
+  renderContractTable();
+  renderOnlineEmpty();
+
+  $("contractRunMeta").textContent = `Run #${run.id} • model: — • topK: —`;
+}
+
+/* --------- Export --------- */
+function exportJSON(){
+  const run = trainingRuns.find(r=>r.id===activeRunId);
+  const topKpct = clamp(parseFloat($("topk").value||5),1,50);
+  const payload = {
+    meta: { game:"Ballistar", N, activeRunId, lastSendNonce },
+    activeRun: { id: run.id, seed: run.seed, createdAt: run.createdAt, selectedModelKey: run.selectedModelKey },
+    topKpct,
+    offline_metrics: ["pltv","ltv7","heur","rand"].map(m=>offlineMetrics(m, topKpct)),
+    activation_contract: lastContract,
+    online_results: lastOnlineResults.map(r=>({
+      key:r.key, cpi:r.cpi, installs:r.installs, revenue90:r.revenue90, roas:r.roas, profit:r.profit
+    }))
+  };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url; a.download=`ballistar_seed_eval_${Date.now()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* --------- Events --------- */
+document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click", ()=>setTab(t.dataset.tab)));
+
+$("runSelect").addEventListener("change", (e)=>{
+  setActiveRun(parseInt(e.target.value,10));
+  showMsg(`✅ Switched to training run #${activeRunId}. Select a model to unlock Step 2.`, "ok");
+});
+
+$("retrainBtn").addEventListener("click", ()=>{
+  const seed = Math.floor(Math.random()*1_000_000);
+  addTrainingRun(seed);
+  setActiveRun(activeRunId);
+  showMsg(`✅ Retrained models: created <b>Run #${activeRunId}</b> (seed ${seed}).`, "ok");
+});
+
+$("exportBtn").addEventListener("click", exportJSON);
+
+$("topk").addEventListener("change", ()=>{
+  // Offline always updates for any K.
+  renderAllOffline();
+  // Online requires resend because Top-K changes the seed list. Keep existing results but show hint via message.
+  if(lastContract.length>0){
+    showMsg(`ℹ️ Top-K changed. Click <b>Send selected seeds</b> again to get new online results for K=${$("topk").value}%.`, "info");
+  }
+});
+
+$("sensitivity").addEventListener("input", (e)=> setSensitivityPill(parseFloat(e.target.value)/100));
+
+$("sendBtn").addEventListener("click", ()=>{
+  if(!modelChosen){
+    showMsg(`⚠️ Step 2 is locked. Select a model in Step 1 first.`, "info");
+    return;
+  }
+  const selected = getSelectedSeedKeys();
+  if(selected.length===0){
+    showMsg(`⚠️ Please select at least one seed.`, "info");
+    return;
+  }
+
+  const topKpct = clamp(parseFloat($("topk").value||5), 1, 50);
+  const budget = Math.max(1000, parseFloat($("budget").value||20000));
+  const baseCpi = Math.max(0.2, parseFloat($("baseCpi").value||1.6));
+  const sens = clamp(parseFloat($("sensitivity").value||60)/100, 0, 1);
+
+  const run = trainingRuns.find(r=>r.id===activeRunId);
+  const modelKind = run.selectedModelKey;
+
+  // Randomize each send (even with same K): nonce changes RNG seeds
+  lastSendNonce = Date.now() ^ Math.floor(Math.random()*1e9);
+
+  // Activation contract
+  const now = Date.now();
+  lastContract = selected.map((k, idx)=>({
+    key: k, status: "SENT", sentAt: now + idx*180, resultAt: null
+  }));
+  renderContractTable();
+
+  // Compute results
+  let results = selected
+    .map(k=>simulateOnline(k, topKpct, budget, baseCpi, sens, modelKind, lastSendNonce))
+    .filter(Boolean);
+
+  // Soft safeguard: if STRONG and both pLTV + LTV7 exist, ensure pLTV is best online (without making it look “hardcoded”)
+  const isStrong = (modelKind==="strong");
+  const hasPLTV = results.some(r=>r.key==="pltv");
+  const hasBase = results.some(r=>r.key==="ltv7");
+  if(isStrong && hasPLTV && hasBase){
+    const p = results.find(r=>r.key==="pltv");
+    const b = results.find(r=>r.key==="ltv7");
+    if(p.revenue90 <= b.revenue90){
+      const bump = 1.015 + 0.01*Math.random();
+      p.revenue90 = b.revenue90 * bump;
+      p.roas = p.revenue90 / p.budget;
+      p.profit = p.revenue90 - p.budget;
+      p.curve = makeCumulativeCurve(p.revenue90, (lastSendNonce^0xBEEF), {k:2.9, earlyBias:0.12, jitter:0.012});
+    }
+    if(p.cpi >= b.cpi){
+      p.cpi = b.cpi * (0.985 - 0.01*Math.random());
+      p.installs = Math.floor(p.budget / p.cpi);
+      // Keep revenue90 same; ROAS and profit already based on revenue90.
+    }
+  }
+
+  lastOnlineResults = results;
+
+  // Mark results received with timestamps
+  lastContract = lastContract.map((c, idx)=>({
+    ...c,
+    status: "RESULTS_RECEIVED",
+    resultAt: c.sentAt + 950 + idx*240
+  }));
+  renderContractTable();
+
+  renderOnlineResults(results);
+
+  $("contractRunMeta").textContent =
+    `Run #${run.id} • model: ${modelKind.toUpperCase()} • topK: ${topKpct}% • send: ${String(lastSendNonce).slice(-6)}`;
+
+  showMsg(`🚀 Sent <b>${selected.length}</b> seed(s). Results are randomized per send and updated for K=${topKpct}%.`, "ok");
+  setTab("online");
+});
+
+/* --------- Init --------- */
+(function init(){
+  generateDataset(1337);
+
+  // initial run (no default model selection)
+  addTrainingRun(2024);
+  renderRunsSelect();
+
+  // initial view
+  setActiveRun(activeRunId);
+  setSensitivityPill(parseFloat($("sensitivity").value)/100);
+
+  showMsg(`Ready. Step 1: select a model (no default).`, "info");
+})();
+</script>
+</body>
+</html>

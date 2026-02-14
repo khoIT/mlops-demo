@@ -77,7 +77,48 @@ export type Playbook = "supervised" | "persona" | "pltv";
 
 // ─── pLTV Pipeline Types ────────────────────────────────────────────────────
 
-export type PLTVStep = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+export type PLTVStep = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+// ─── Decision Intelligence Types ─────────────────────────────────────────────
+
+export type ModelCategory = "value" | "risk" | "responsiveness" | "intent";
+
+export interface DecisionProblem {
+  id: string;
+  category: "UA" | "LiveOps";
+  question: string;
+  shortLabel: string;
+  modelFamily: ModelCategory[];
+  coreFeatures: string[];
+  activationUsecases: string[];
+}
+
+export interface DecisionSegment {
+  id: string;
+  name: string;
+  color: string;
+  rules: DecisionRule[];
+  userCount: number;
+  avgScore: number;
+  avgActualLTV: number;
+  action: string;
+}
+
+export interface DecisionRule {
+  field: string;        // "pltv_score" | "pltv_decile" | feature name
+  operator: ">=" | "<=" | ">" | "<" | "==" | "!=";
+  value: number | string;
+}
+
+export interface DecisionVersion {
+  id: number;
+  problemId: string;
+  segments: DecisionSegment[];
+  abSplit: number;       // 0-100 % for test group
+  author: string;
+  note: string;
+  timestamp: number;
+}
 
 export interface GamePlayer {
   game_user_id: string;
@@ -153,6 +194,7 @@ export interface PLTVFeatureRow {
   friends_added_w7d: number;
   chat_messages_w7d: number;
   // Block 5 — Early monetization
+  is_payer_by_d3: number;
   is_payer_by_d7: number;
   num_txn_d7: number;
   revenue_d7: number;
@@ -167,10 +209,13 @@ export interface PLTVFeatureRow {
   install_hour: number;
   install_day_of_week: number;
   // Labels
+  ltv_d3: number;
   ltv_d7: number;
   ltv_d30: number;
   ltv_d60: number;
+  ltv_d90: number;
   is_churned_d14: number;
+  payer_by_d3: number;
   payer_by_d7: number;
 }
 

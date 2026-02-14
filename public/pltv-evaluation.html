@@ -1,0 +1,2066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Decision Lab — pLTV Evaluation</title>
+<style>
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: #0a0a0f;
+    color: #e4e4e7;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 48px 24px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    color: #f4f4f5;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #71717a;
+    font-size: 14px;
+    margin-bottom: 48px;
+  }
+  .subtitle em { color: #a1a1aa; font-style: normal; }
+
+  /* ─── Pipeline Flow ─── */
+  .pipeline {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    position: relative;
+    margin-bottom: 48px;
+  }
+
+  .step-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    position: relative;
+  }
+
+  .step {
+    flex: 1;
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .step:hover { transform: translateY(-4px); }
+
+  .step-card {
+    border-radius: 16px;
+    padding: 24px 18px;
+    text-align: center;
+    position: relative;
+    border: 1.5px solid transparent;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .step:hover .step-card {
+    box-shadow: 0 0 30px rgba(255,255,255,0.03);
+  }
+  .step.active .step-card {
+    border-color: rgba(255,255,255,0.15);
+    box-shadow: 0 0 40px rgba(255,255,255,0.05);
+  }
+
+  .step-number {
+    position: absolute;
+    top: 10px;
+    left: 14px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #52525b;
+    letter-spacing: 0.5px;
+  }
+
+  .step-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    font-size: 22px;
+  }
+
+  .step-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .step-desc {
+    font-size: 11px;
+    color: #71717a;
+    line-height: 1.4;
+  }
+
+  /* Step colors */
+  .step-0 .step-card { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
+  .step-0 .step-icon { background: rgba(59,130,246,0.15); }
+  .step-0 .step-title { color: #60a5fa; }
+  .step-0.active .step-card { border-color: rgba(59,130,246,0.3); box-shadow: 0 0 40px rgba(59,130,246,0.08); }
+
+  .step-1 .step-card { background: linear-gradient(135deg, #1a2e1a 0%, #1e3a1e 100%); }
+  .step-1 .step-icon { background: rgba(34,197,94,0.15); }
+  .step-1 .step-title { color: #4ade80; }
+  .step-1.active .step-card { border-color: rgba(34,197,94,0.3); box-shadow: 0 0 40px rgba(34,197,94,0.08); }
+
+  .step-2 .step-card { background: linear-gradient(135deg, #2e1a2e 0%, #3e1640 100%); }
+  .step-2 .step-icon { background: rgba(168,85,247,0.15); }
+  .step-2 .step-title { color: #c084fc; }
+  .step-2.active .step-card { border-color: rgba(168,85,247,0.3); box-shadow: 0 0 40px rgba(168,85,247,0.08); }
+
+  .step-3 .step-card { background: linear-gradient(135deg, #2e2a1a 0%, #3e3216 100%); }
+  .step-3 .step-icon { background: rgba(251,191,36,0.15); }
+  .step-3 .step-title { color: #fbbf24; }
+  .step-3.active .step-card { border-color: rgba(251,191,36,0.3); box-shadow: 0 0 40px rgba(251,191,36,0.08); }
+
+  .step-4 .step-card { background: linear-gradient(135deg, #2e1a1a 0%, #3e1616 100%); }
+  .step-4 .step-icon { background: rgba(239,68,68,0.15); }
+  .step-4 .step-title { color: #f87171; }
+  .step-4.active .step-card { border-color: rgba(239,68,68,0.3); box-shadow: 0 0 40px rgba(239,68,68,0.08); }
+
+  /* Arrows between steps */
+  .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    flex-shrink: 0;
+    padding-top: 50px;
+  }
+  .arrow svg {
+    color: #3f3f46;
+    transition: color 0.3s;
+  }
+  .arrow.lit svg { color: #a1a1aa; }
+
+  /* ─── Detail Panel ─── */
+  .detail-panel {
+    background: #111118;
+    border: 1px solid #27272a;
+    border-radius: 16px;
+    padding: 32px;
+    min-height: 320px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #1f1f28;
+  }
+  .detail-header .badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+  }
+  .detail-header h2 {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .detail-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .detail-section h3 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #71717a;
+    margin-bottom: 10px;
+  }
+
+  .detail-section ul {
+    list-style: none;
+    padding: 0;
+  }
+  .detail-section ul li {
+    font-size: 13px;
+    color: #a1a1aa;
+    padding: 5px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    line-height: 1.4;
+  }
+  .detail-section ul li::before {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+
+  .color-blue li::before { background: #60a5fa; }
+  .color-green li::before { background: #4ade80; }
+  .color-purple li::before { background: #c084fc; }
+  .color-amber li::before { background: #fbbf24; }
+  .color-red li::before { background: #f87171; }
+
+  .detail-tag {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #a1a1aa;
+    margin: 2px 3px 2px 0;
+  }
+
+  /* pLTV callout */
+  .pltv-callout {
+    margin-top: 20px;
+    padding: 16px;
+    background: rgba(59,130,246,0.05);
+    border: 1px solid rgba(59,130,246,0.12);
+    border-radius: 12px;
+    grid-column: 1 / -1;
+  }
+  .pltv-callout h4 {
+    font-size: 12px;
+    font-weight: 700;
+    color: #60a5fa;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pltv-callout p {
+    font-size: 12px;
+    color: #71717a;
+    line-height: 1.5;
+  }
+
+  /* ─── Model Family Bar ─── */
+  .model-families {
+    margin-top: 48px;
+    padding: 24px;
+    background: #111118;
+    border: 1px solid #27272a;
+    border-radius: 16px;
+  }
+  .model-families h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #d4d4d8;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .families-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .family-card {
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #27272a;
+    background: #18181b;
+    transition: border-color 0.2s, transform 0.2s;
+    cursor: default;
+  }
+  .family-card:hover {
+    border-color: #3f3f46;
+    transform: translateY(-2px);
+  }
+  .family-emoji { font-size: 20px; margin-bottom: 8px; }
+  .family-name {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .family-q {
+    font-size: 11px;
+    color: #71717a;
+    font-style: italic;
+    line-height: 1.3;
+  }
+  .family-card:nth-child(1) .family-name { color: #60a5fa; }
+  .family-card:nth-child(2) .family-name { color: #fbbf24; }
+  .family-card:nth-child(3) .family-name { color: #f87171; }
+  .family-card:nth-child(4) .family-name { color: #c084fc; }
+
+  /* ─── Entity note ─── */
+  .entity-bar {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .entity-chip {
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 8px;
+    border: 1px solid #27272a;
+    background: #18181b;
+    color: #a1a1aa;
+  }
+  .entity-chip strong { color: #d4d4d8; }
+
+  /* ─── Sample Data Tables ─── */
+  .sample-tables {
+    margin-top: 20px;
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .sample-table-section {
+    background: #0d0d14;
+    border: 1px solid #1f1f28;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .sample-table-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #1f1f28;
+    font-size: 12px;
+    font-weight: 700;
+    color: #d4d4d8;
+  }
+  .sample-table-header .count { color: #71717a; font-weight: 400; font-size: 11px; }
+  .sample-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .sample-table thead th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    color: #52525b;
+    border-bottom: 1px solid #1f1f28;
+    white-space: nowrap;
+  }
+  .sample-table tbody tr {
+    border-bottom: 1px solid #18181b;
+    transition: background 0.1s;
+  }
+  .sample-table tbody tr:hover { background: rgba(255,255,255,0.015); }
+  .sample-table td {
+    padding: 7px 12px;
+    color: #a1a1aa;
+    white-space: nowrap;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 10.5px;
+  }
+  .sample-table .uid { color: #60a5fa; }
+  .sample-table .channel { color: #a1a1aa; }
+  .sample-table .event-name {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .ev-session { background: rgba(59,130,246,0.12); color: #60a5fa; }
+  .ev-purchase { background: rgba(34,197,94,0.12); color: #4ade80; }
+  .ev-dungeon { background: rgba(239,68,68,0.12); color: #f87171; }
+  .ev-chat { background: rgba(168,85,247,0.12); color: #c084fc; }
+  .ev-guild { background: rgba(251,191,36,0.12); color: #fbbf24; }
+  .ev-quest { background: rgba(34,197,94,0.12); color: #4ade80; }
+  .ev-pvp { background: rgba(239,68,68,0.12); color: #f87171; }
+  .ev-gacha { background: rgba(251,191,36,0.12); color: #fbbf24; }
+  .sample-table .params { color: #52525b; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  .sample-table .consent { text-align: center; }
+
+  /* ─── Model Card ─── */
+  .model-card-grid {
+    margin-top: 20px;
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .model-info-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+  .model-info-box {
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #27272a;
+    background: #0d0d14;
+  }
+  .model-info-box h4 {
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .model-info-box .info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    padding: 3px 0;
+  }
+  .model-info-box .info-label { color: #52525b; }
+  .model-info-box .info-value { color: #d4d4d8; font-family: 'SF Mono', Monaco, Consolas, monospace; }
+  .model-info-box .info-value.highlight { color: #4ade80; }
+
+  .model-stats-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  .model-stat-card {
+    padding: 14px;
+    border-radius: 10px;
+    border: 1px solid #27272a;
+    background: #0d0d14;
+    text-align: center;
+  }
+  .model-stat-card .stat-label { font-size: 9px; color: #52525b; text-transform: uppercase; letter-spacing: 0.8px; }
+  .model-stat-card .stat-name { font-size: 11px; color: #a1a1aa; font-weight: 700; margin: 2px 0; }
+  .model-stat-card .stat-value { font-size: 18px; font-weight: 700; font-family: 'SF Mono', Monaco, Consolas, monospace; }
+  .stat-green { color: #4ade80; }
+  .stat-amber { color: #fbbf24; }
+  .stat-cyan { color: #22d3ee; }
+  .stat-purple { color: #c084fc; }
+
+  .fi-section {
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #27272a;
+    background: #0d0d14;
+  }
+  .fi-section h4 {
+    font-size: 11px;
+    font-weight: 700;
+    color: #d4d4d8;
+    margin-bottom: 12px;
+  }
+  .fi-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 11px;
+  }
+  .fi-bar-label { width: 160px; text-align: right; color: #71717a; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fi-bar-track { flex: 1; height: 14px; background: #18181b; border-radius: 4px; overflow: hidden; position: relative; }
+  .fi-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+  .fi-bar-val { width: 40px; text-align: right; color: #52525b; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 10px; flex-shrink: 0; }
+
+  .model-train-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: rgba(168,85,247,0.1);
+    border: 1px solid rgba(168,85,247,0.2);
+    font-size: 12px;
+    color: #c084fc;
+    font-weight: 600;
+  }
+  .model-train-badge .meta { color: #71717a; font-weight: 400; }
+
+  /* ─── Decision Profile Table Example ─── */
+  .dpt-section {
+    margin-top: 48px;
+    padding: 32px;
+    background: #111118;
+    border: 1px solid #27272a;
+    border-radius: 16px;
+  }
+  .dpt-section > h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fbbf24;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dpt-subtitle {
+    font-size: 12px;
+    color: #71717a;
+    margin-bottom: 20px;
+  }
+  .dpt-flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .dpt-flow-step {
+    font-size: 11px;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+  .dpt-flow-arrow {
+    color: #3f3f46;
+    font-size: 14px;
+  }
+  .dpt-table-wrap {
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid #27272a;
+  }
+  .dpt-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .dpt-table thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #52525b;
+    border-bottom: 1px solid #27272a;
+    white-space: nowrap;
+  }
+  .dpt-table thead th.group-model { color: #c084fc; border-bottom: 2px solid rgba(168,85,247,0.3); }
+  .dpt-table thead th.group-rule { color: #fbbf24; border-bottom: 2px solid rgba(251,191,36,0.3); }
+  .dpt-table thead th.group-output { color: #4ade80; border-bottom: 2px solid rgba(34,197,94,0.3); }
+  .dpt-table tbody tr {
+    border-bottom: 1px solid #1f1f28;
+    transition: background 0.15s;
+  }
+  .dpt-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .dpt-table td {
+    padding: 10px 14px;
+    color: #a1a1aa;
+    white-space: nowrap;
+  }
+  .dpt-table .cohort-name { color: #d4d4d8; font-weight: 600; }
+  .dpt-table .score { font-family: 'SF Mono', Monaco, Consolas, monospace; }
+  .dpt-table .score-high { color: #4ade80; }
+  .dpt-table .score-mid { color: #fbbf24; }
+  .dpt-table .score-low { color: #f87171; }
+  .dpt-action {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 6px;
+    display: inline-block;
+  }
+  .dpt-action.scale { background: rgba(34,197,94,0.12); color: #4ade80; }
+  .dpt-action.hold { background: rgba(251,191,36,0.12); color: #fbbf24; }
+  .dpt-action.reduce { background: rgba(239,68,68,0.12); color: #f87171; }
+  .dpt-action.kill { background: rgba(239,68,68,0.2); color: #ef4444; }
+
+  .dpt-legend {
+    margin-top: 16px;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .dpt-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #71717a;
+  }
+  .dpt-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .dpt-anatomy {
+    margin-top: 24px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .dpt-anatomy-card {
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #27272a;
+    background: #18181b;
+  }
+  .dpt-anatomy-card h4 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+  }
+  .dpt-anatomy-card ul {
+    list-style: none;
+    padding: 0;
+  }
+  .dpt-anatomy-card li {
+    font-size: 11px;
+    color: #71717a;
+    padding: 3px 0;
+    line-height: 1.4;
+  }
+  .dpt-anatomy-card li code {
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.05);
+    color: #a1a1aa;
+  }
+
+  /* Animations */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .detail-panel { animation: fadeIn 0.3s ease; }
+
+  /* ─── Responsive ─── */
+  @media (max-width: 900px) {
+    .pipeline { flex-direction: column; align-items: stretch; }
+    .step-wrapper { flex-direction: column; }
+    .arrow { width: auto; height: 30px; padding-top: 0; transform: rotate(90deg); }
+    .detail-body { grid-template-columns: 1fr; }
+    .families-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+
+  /* ─── Evaluation Layout ─── */
+  .eval-grid{
+    display:grid;
+    grid-template-columns: 420px 1fr;
+    gap: 16px;
+    margin-top: 22px;
+  }
+  @media (max-width: 980px){
+    .eval-grid{ grid-template-columns: 1fr; }
+  }
+
+  .panel{
+    background: #111118;
+    border: 1px solid #27272a;
+    border-radius: 16px;
+    padding: 18px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(0,0,0,0.25);
+  }
+
+  .panel h2{
+    font-size: 13px;
+    color: #cbd5e1;
+    letter-spacing: .2px;
+    margin: 0 0 10px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+
+  .muted{ color:#a1a1aa; }
+
+  .row{
+    display:flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .row + .row{ margin-top: 10px; }
+
+  .hr{
+    height:1px;
+    background:#1f1f28;
+    margin: 14px 0;
+  }
+
+  label{
+    font-size: 12px;
+    color:#a1a1aa;
+    display:block;
+    margin-bottom: 6px;
+  }
+
+  select, input[type="number"]{
+    width:100%;
+    background:#0f0f16;
+    color:#e4e4e7;
+    border: 1px solid #27272a;
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 13px;
+    outline:none;
+  }
+  select:focus, input[type="number"]:focus{
+    border-color: rgba(255,255,255,0.18);
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.04);
+  }
+  input[type="range"]{ width:100%; }
+
+  .btn{
+    cursor:pointer;
+    border: 1px solid #27272a;
+    background:#0f0f16;
+    color:#e4e4e7;
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 13px;
+    transition: transform .12s, box-shadow .2s, border-color .2s;
+  }
+  .btn:hover{
+    transform: translateY(-1px);
+    border-color: rgba(255,255,255,0.18);
+    box-shadow: 0 0 24px rgba(255,255,255,0.03);
+  }
+  .btn.primary{
+    background: linear-gradient(180deg, rgba(16,185,129,.18), rgba(16,185,129,.08));
+    border-color: rgba(16,185,129,.35);
+    color: #a7f3d0;
+  }
+  .btn.blue{
+    background: linear-gradient(180deg, rgba(96,165,250,.18), rgba(96,165,250,.08));
+    border-color: rgba(96,165,250,.30);
+    color: #bfdbfe;
+  }
+
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background:#0f0f16;
+    border: 1px solid #27272a;
+    color:#cbd5e1;
+  }
+  .pill.good{ border-color: rgba(16,185,129,.45); color:#a7f3d0; }
+  .pill.warn{ border-color: rgba(245,158,11,.45); color:#fde68a; }
+
+  .tabs{
+    display:flex;
+    gap:6px;
+    padding:4px;
+    background:#0f0f16;
+    border:1px solid #27272a;
+    border-radius: 999px;
+  }
+  .tab{
+    padding: 7px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    color:#a1a1aa;
+    cursor:pointer;
+    user-select:none;
+    transition: background .2s, color .2s, border-color .2s;
+  }
+  .tab.active{
+    background: rgba(255,255,255,0.06);
+    color:#f4f4f5;
+  }
+
+  .tip{
+    width:18px; height:18px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border-radius: 999px;
+    border:1px solid #27272a;
+    color:#a1a1aa;
+    font-size: 11px;
+    cursor: help;
+  }
+  .tip[data-tip]:hover::after{
+    content: attr(data-tip);
+    position:absolute;
+    z-index: 50;
+    max-width: 360px;
+    background:#0f0f16;
+    border:1px solid #27272a;
+    color:#e4e4e7;
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    line-height: 1.35;
+    margin-top: 10px;
+    transform: translateX(-40%);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+    white-space: normal;
+  }
+
+  table{
+    width:100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    overflow:hidden;
+    border-radius: 14px;
+    border: 1px solid #27272a;
+    background: #0f0f16;
+  }
+  thead th{
+    text-align:left;
+    padding: 10px 10px;
+    color:#cbd5e1;
+    font-weight: 700;
+    border-bottom: 1px solid #27272a;
+    background: rgba(255,255,255,0.02);
+  }
+  tbody td{
+    padding: 9px 10px;
+    color:#e4e4e7;
+    border-bottom: 1px solid rgba(39,39,42,0.65);
+  }
+  tbody tr:hover td{ background: rgba(255,255,255,0.02); }
+  tbody tr:last-child td{ border-bottom:none; }
+
+  canvas{
+    width: 100%;
+    height: 320px;
+    border-radius: 14px;
+    border: 1px solid #27272a;
+    background: #0f0f16;
+  }
+
+  .legend{
+    display:flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    color:#a1a1aa;
+    font-size: 12px;
+  }
+  .dot{
+    width:10px; height:10px;
+    border-radius: 999px;
+    display:inline-block;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .dot.pltv{ background:#10b981; }
+  .dot.ltv7{ background:#60a5fa; }
+  .dot.heur{ background:#f59e0b; }
+  .dot.rand{ background:#a78bfa; }
+
+  .msgBar{
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid #27272a;
+    background: #0f0f16;
+    color:#a1a1aa;
+    font-size: 12px;
+  }
+  .msgBar.good{ border-color: rgba(16,185,129,.35); color:#a7f3d0; }
+  .msgBar.warn{ border-color: rgba(245,158,11,.35); color:#fde68a; }
+  .msgBar.bad{ border-color: rgba(244,63,94,.35); color:#fecdd3; }
+
+  .modelList{ display:flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+  .modelCard{
+    border: 1px solid #27272a;
+    background: rgba(255,255,255,0.02);
+    border-radius: 14px;
+    padding: 12px;
+    cursor:pointer;
+    transition: border-color .2s, transform .12s;
+  }
+  .modelCard:hover{ transform: translateY(-1px); border-color: rgba(255,255,255,0.18); }
+  .modelCard.active{ border-color: rgba(16,185,129,.35); box-shadow: 0 0 28px rgba(16,185,129,.06); }
+  .modelTitle{ display:flex; justify-content: space-between; align-items:center; gap:10px; }
+  .modelName{ font-weight: 700; color:#f4f4f5; font-size: 13px; }
+  .modelMeta{ color:#a1a1aa; font-size: 12px; margin-top: 6px; line-height: 1.35; }
+
+  .seedGrid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .seedItem{
+    border: 1px solid #27272a;
+    background:#0f0f16;
+    border-radius: 14px;
+    padding: 10px 12px;
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap:10px;
+  }
+  .seedItem strong{ font-size: 12px; color:#f4f4f5; }
+  .seedItem span{ font-size: 12px; color:#a1a1aa; }
+
+  .switch{
+    display:flex; align-items:center; gap:8px;
+    user-select:none;
+  }
+  .switch input{ transform: translateY(1px); }
+
+
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>💎 pLTV Evaluation</h1>
+    <p class="subtitle">Standalone Decision Lab page to compare <em>pLTV vs baseline LTV</em> for Top‑K seed selection and downstream ads outcomes</p>
+
+    <div class="eval-grid">
+      <!-- LEFT: Controls -->
+      <div class="panel">
+        <h2>
+          Step 1 — Load pLTV scores
+          <span class="tip" data-tip="This page reads pLTV scores from public/game-pltv-scores.csv (generated by your data generator / retrain action in the app). If you update that CSV, click Reload to refresh the evaluation.">i</span>
+        </h2>
+
+        <div class="row">
+          <div style="flex:1">
+            <label>Model source</label>
+            <div class="pill" id="pillModel">game-pltv-scores.csv</div>
+          </div>
+          <div style="width:190px">
+            <label>Dataset</label>
+            <div class="pill" id="pillN">Loading…</div>
+          </div>
+        </div>
+
+
+
+        <div class="row">
+          <button class="btn primary" id="retrainBtn">Reload scores</button>
+          <button class="btn" id="exportBtn">Export JSON</button>
+        </div>
+
+        <div class="msgBar" id="msgBar"></div>
+
+        <div class="hr"></div>
+
+        <h2>
+          Step 2 — Send seed(s) to ads network
+          <span class="tip" data-tip="Pick 1–4 seed strategies and send. Each selected seed becomes a campaign variant and returns its own results. Results are randomized each send and depend on Top‑K, but the STRONG pLTV model should win reliably when late-monetizers exist.">i</span>
+        </h2>
+
+        <div class="row">
+          <div style="flex:1">
+            <label>Top‑K % (for all seeds)</label>
+            <input id="topk" type="number" min="1" max="50" value="5" />
+          </div>
+          <div style="flex:1">
+            <label>Budget per seed ($)</label>
+            <input id="budget" type="number" min="1" max="200000" value="5000" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div style="flex:1">
+            <label>Base CPI ($) (sim)</label>
+            <input id="baseCpi" type="number" min="0.1" max="50" step="0.1" value="3.5" />
+          </div>
+          <div style="flex:1">
+            <label>Ads network sensitivity</label>
+            <input id="sensitivity" type="range" min="0" max="100" value="70" />
+          </div>
+          <div style="width:160px">
+            <label>Noise level</label>
+            <div class="pill" id="sensPill">high</div>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="seedGrid">
+          <div class="seedItem">
+            <div>
+              <strong>pLTV</strong><br><span>Use selected model score</span>
+            </div>
+            <div class="switch"><input id="seedPLTV" type="checkbox" checked /></div>
+          </div>
+          <div class="seedItem">
+            <div>
+              <strong>LTV7</strong><br><span>Baseline early revenue</span>
+            </div>
+            <div class="switch"><input id="seedLTV7" type="checkbox" checked /></div>
+          </div>
+          <div class="seedItem">
+            <div>
+              <strong>Heuristic</strong><br><span>Rules proxy mix</span>
+            </div>
+            <div class="switch"><input id="seedHeur" type="checkbox" /></div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:12px;">
+          <button class="btn blue" id="sendBtn">Send seeds → Ads</button>
+        </div>
+
+        <div class="hr"></div>
+
+        <h2>
+          Activation contract
+          <span class="tip" data-tip="Tracks which user_ids were exposed by each seed/campaign variant so you can attribute downstream outcomes and treatments.">i</span>
+        </h2>
+        <div class="muted" id="contractRunMeta" style="font-size:12px;">Run —</div>
+
+        <div style="margin-top:10px; max-height: 220px; overflow:auto; border-radius:14px;">
+          <table id="contractTable"></table>
+        </div>
+      </div>
+
+      <!-- RIGHT: Outputs -->
+      <div class="panel">
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <h2 style="margin:0;">
+            Outputs
+            <span class="tip" data-tip="Offline = seed quality against LTV90. Online = simulated ads results (CPI/ROAS/profit). Data = underlying table for inspection and debugging.">i</span>
+          </h2>
+
+          <div class="tabs">
+            <div class="tab active" data-tab="overview">Offline</div>
+            <div class="tab" data-tab="online">Online</div>
+            <div class="tab" data-tab="data">Data</div>
+          </div>
+        </div>
+
+        <!-- OFFLINE -->
+        <div id="panel-overview">
+          <div class="hr"></div>
+          <h2>Offline lift curve</h2>
+          <canvas id="liftCanvas" width="1000" height="320"></canvas>
+          <div class="legend">
+            <span><i class="dot pltv"></i> pLTV</span>
+            <span><i class="dot ltv7"></i> LTV7</span>
+            <span><i class="dot heur"></i> Heuristic</span>
+          </div>
+
+          <div class="hr"></div>
+          <h2>Offline seed quality (@ Top‑K)</h2>
+          <table id="offlineTable"></table>
+          <div class="msgBar" id="offlineNote"></div>
+        </div>
+
+        <!-- ONLINE -->
+        <div id="panel-online" style="display:none;">
+          <div class="hr"></div>
+          <h2>Online outcomes (simulated)</h2>
+          <table id="onlineTable"></table>
+
+          <div class="hr"></div>
+          <h2>Conversion curve</h2>
+          <canvas id="curveCanvas" width="1000" height="320"></canvas>
+        </div>
+
+        <!-- DATA -->
+        <div id="panel-data" style="display:none;">
+          <div class="hr"></div>
+          <h2>Dataset slice (Top‑K ranking)</h2>
+          <div style="max-height: 520px; overflow:auto; border-radius:14px;">
+            <table id="dataTable"></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+
+/* =========================================================
+   Changes per request:
+   1) Move explanatory text into tooltips: done (ⓘ icons).
+   2) More realistic curves (offline + online) while keeping STRONG pLTV best:
+      - Offline: introduce heterogeneous segments + piecewise mixing so lift curves differ more.
+      - Online: per-seed curve uses varied growth rate + early/late shape + jitter (still monotonic).
+   3) Online curves/results work for any Top-K (user input); results randomized each SEND,
+      while STRONG pLTV remains best (soft safeguard).
+   ========================================================= */
+
+const $ = (id)=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmtMoney = (x)=>"$" + (x||0).toLocaleString(undefined,{maximumFractionDigits:0});
+const fmtMoney2 = (x)=>"$" + (x||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtPct = (x)=> (x*100).toFixed(1) + "%";
+const fmtTime = (ms)=> new Date(ms).toLocaleString();
+
+function mulberry32(seed){
+  return function() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+}
+function randn(rng){
+  let u=0,v=0; while(u===0)u=rng(); while(v===0)v=rng();
+  return Math.sqrt(-2.0*Math.log(u))*Math.cos(2.0*Math.PI*v);
+}
+function quantile(arr,q){
+  const a=[...arr].sort((x,y)=>x-y);
+  const pos=(a.length-1)*q, base=Math.floor(pos), rest=pos-base;
+  return a[base+1]!==undefined ? a[base]+rest*(a[base+1]-a[base]) : a[base];
+}
+function showMsg(html, kind="info"){
+  const bar = $("msgBar");
+  bar.style.display="block";
+  bar.innerHTML = html;
+  bar.style.borderColor = kind==="ok" ? "rgba(71,209,140,.25)" : "rgba(255,255,255,0.10)";
+  bar.style.background = kind==="ok" ? "rgba(71,209,140,.07)" : "rgba(0,0,0,0.12)";
+  bar.style.color = kind==="ok" ? "rgba(71,209,140,0.95)" : "var(--muted)";
+}
+function setSensitivityPill(v){
+  const pill = $("sensPill");
+  if(v<0.33){ pill.textContent="low"; pill.className="pill"; }
+  else if(v<0.66){ pill.textContent="medium"; pill.className="pill warn"; }
+  else { pill.textContent="high"; pill.className="pill good"; }
+}
+
+let N = 2000;
+let users = [];
+
+let trainingRuns = []; // {id, createdAt, seed, models:{weak,medium,strong}, selectedModelKey:null|...}
+let activeRunId = 1; // kept only for RNG seeding stability
+let runCounter = 1;
+
+let modelChosen = false;
+
+// online state
+let lastContract = [];
+let lastOnlineResults = [];
+let lastSendNonce = null; // changes every send to randomize outcomes
+
+/* --------- Dataset: more heterogeneous segments (realism) --------- */
+
+/* --------- CSV loader (Decision Lab public data) --------- */
+async function fetchText(url){
+  const res = await fetch(url, { cache: "no-store" });
+  if(!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
+  return await res.text();
+}
+
+// Minimal CSV parser (no embedded newlines). Supports quoted fields.
+function parseCSV(text){
+  const lines = text.trim().split(/\r?\n/);
+  const header = splitCSVLine(lines[0]);
+  const rows = [];
+  for(let i=1;i<lines.length;i++){
+    if(!lines[i]) continue;
+    const cols = splitCSVLine(lines[i]);
+    const obj = {};
+    for(let c=0;c<header.length;c++) obj[header[c]] = cols[c] ?? "";
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function splitCSVLine(line){
+  const out = [];
+  let cur = "";
+  let inQ = false;
+  for(let i=0;i<line.length;i++){
+    const ch = line[i];
+    if(ch === '"'){
+      if(inQ && line[i+1] === '"'){ cur+='"'; i++; }
+      else inQ = !inQ;
+    } else if(ch === "," && !inQ){
+      out.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+let __loadedFromCSV = false;
+
+
+function buildUsersFromCSVs(playersRows, labelsRows, paymentsRows, pltvScoresRows){
+  // player meta + install time
+  const metaById = new Map();
+  for(const p of playersRows){
+    const installMs = Date.parse(p.install_time);
+    metaById.set(p.game_user_id, {
+      user_id: p.game_user_id,
+      installMs: isNaN(installMs) ? null : installMs,
+      channel: p.channel,
+      country: p.country,
+      os: p.os,
+      device_tier: p.device_tier,
+    });
+  }
+
+  // aggregate payments into D7 metrics (from game-payments.csv)
+  const payAgg = new Map(); // user_id -> {ltv7, numTxn7, firstPurchaseHours}
+  for(const tx of paymentsRows){
+    const uid = tx.game_user_id;
+    const meta = metaById.get(uid);
+    if(!meta || !meta.installMs) continue;
+
+    const txMs = Date.parse(tx.txn_time);
+    if(isNaN(txMs)) continue;
+
+    const amount = parseFloat(tx.amount_usd || "0") || 0;
+    const isRefund = String(tx.is_refund).toLowerCase() === "true";
+    const net = isRefund ? 0 : amount;
+
+    const days = Math.floor((txMs - meta.installMs) / 86400000);
+    if(days < 0) continue;
+
+    let agg = payAgg.get(uid);
+    if(!agg){
+      agg = { ltv7:0, numTxn7:0, firstPurchaseHours: null };
+      payAgg.set(uid, agg);
+    }
+
+    if(net > 0 && agg.firstPurchaseHours === null){
+      agg.firstPurchaseHours = Math.round(((txMs - meta.installMs) / 3600000) * 100) / 100;
+    }
+
+    if(days <= 6){
+      agg.ltv7 += net;
+      if(net > 0) agg.numTxn7 += 1;
+    }
+  }
+  // round
+  for(const [uid, agg] of payAgg.entries()){
+    agg.ltv7 = Math.round(agg.ltv7 * 100) / 100;
+    if(agg.firstPurchaseHours === null) agg.firstPurchaseHours = 0;
+  }
+
+  // pLTV scores map (from game-pltv-scores.csv)
+  const scoreById = new Map();
+  for(const r of pltvScoresRows){
+    const uid = r.game_user_id;
+    const pred = parseFloat(r.pltv_pred || "0");
+    const dec = parseInt(r.pltv_decile || "0", 10) || 0;
+    scoreById.set(uid, { pred: isNaN(pred) ? 0 : pred, decile: dec });
+  }
+
+  const merged = [];
+  for(const l of labelsRows){
+    const uid = l.game_user_id;
+    const base = metaById.get(uid) || { user_id: uid, channel:"unknown", country:"unknown", os:"unknown", device_tier:"unknown", installMs:null };
+
+    // LTV90 is the evaluation target (from labels)
+    const ltv90 = +l.ltv_d90 || 0;
+
+    // W7 engagement signals from labels (generated from events)
+    const activeDays = +l.active_days_w7d || 0;
+    const sessions = +l.sessions_cnt_w7d || 0;
+    const maxLvl = +l.max_level_w7d || 0;
+
+    const engagement = clamp(
+      0.18
+      + 0.10 * activeDays
+      + 0.05 * Math.min(30, sessions) / 10
+      + 0.06 * Math.min(70, maxLvl) / 70,
+      0, 1
+    );
+
+    // EARLY revenue baseline must come from payments file
+    const agg = payAgg.get(uid) || { ltv7:0, numTxn7:0, firstPurchaseHours:0 };
+    const ltv7 = +agg.ltv7 || 0;
+
+    // flags from generator (if present)
+    const lateFlag = (+l.late_monetizer_flag || 0) === 1;
+    const falseEarlyFlag = (+l.false_early_payer_flag || 0) === 1;
+
+    // Early spend proxy uses real ltv7 + early purchase timing
+    const earlySpendProxy = clamp(
+      (ltv7 > 0 ? 0.55 : 0.12)
+      + 0.35 * clamp(Math.log1p(ltv7) / Math.log(1 + 250), 0, 1)
+      + 0.10 * clamp(1 - (+agg.firstPurchaseHours || 0) / 48, 0, 1)
+      + 0.08 * clamp((+agg.numTxn7 || 0) / 12, 0, 1)
+      + 0.10 * (sessions >= 4 ? 1 : 0)
+      - 0.08 * (activeDays >= 6 ? 1 : 0),
+      0, 1
+    );
+
+    // Late signal: high engagement, low early spend, plus explicit late-monetizer flag
+    const lateSignal = clamp(
+      0.60 * engagement
+      - 0.70 * earlySpendProxy
+      + (lateFlag ? 0.40 : 0)
+      + (falseEarlyFlag ? -0.18 : 0),
+      0, 1
+    );
+
+    // Segment buckets (for narrative + tooltips)
+    let segment = 1; // 0 impulse, 1 grinders, 2 late/social bloomers
+    if(lateFlag) segment = 2;
+    else if(ltv7 > 0 && activeDays <= 2) segment = 0;
+    else if(ltv7 > 0 && sessions <= 2) segment = 0;
+    else if(activeDays >= 5) segment = 1;
+
+    // Heuristic baseline (uses actual payments + engagement)
+    const heuristic_score = (
+      0.55 * (100 * clamp(Math.log1p(ltv7) / Math.log(1 + 250), 0, 1))
+      + 0.25 * (engagement * 100)
+      + 0.12 * (clamp((+agg.numTxn7 || 0) / 12, 0, 1) * 100)
+      + 0.08 * (clamp(1 - (+agg.firstPurchaseHours || 0) / 48, 0, 1) * 100)
+    );
+
+    const score = scoreById.get(uid);
+    const pltv_pred = score ? score.pred : NaN;
+
+    merged.push({
+      ...base,
+      engagement,
+      earlySpendProxy,
+      lateSignal,
+      ltv7,
+      ltv90_actual: ltv90,
+      whale90: ltv90 >= 200 ? 1 : 0,
+      segment,
+      pltv_pred,
+      heuristic_score,
+      num_txn_d7: +agg.numTxn7 || 0,
+      first_purchase_time_hours: +agg.firstPurchaseHours || 0,
+      late_monetizer_flag: lateFlag ? 1 : 0,
+      false_early_payer_flag: falseEarlyFlag ? 1 : 0,
+    });
+  }
+
+  users = merged;
+  N = users.length;
+  __loadedFromCSV = true;
+
+  // modelChosen only when we have scores for most users
+  const scored = users.filter(u=>Number.isFinite(u.pltv_pred)).length;
+  modelChosen = scored >= Math.min(100, Math.floor(users.length * 0.5));
+}
+
+async function tryLoadGameCSVs(){
+  try{
+    const [playersTxt, labelsTxt, paymentsTxt, scoresTxt] = await Promise.all([
+      fetchText("./game-players.csv"),
+      fetchText("./game-labels.csv"),
+      fetchText("./game-payments.csv"),
+      fetchText("./game-pltv-scores.csv"),
+    ]);
+    const playersRows = parseCSV(playersTxt);
+    const labelsRows = parseCSV(labelsTxt);
+    const paymentsRows = parseCSV(paymentsTxt);
+    const pltvScoresRows = parseCSV(scoresTxt);
+
+    buildUsersFromCSVs(playersRows, labelsRows, paymentsRows, pltvScoresRows);
+
+    // UI pills
+    const pill = document.getElementById("pillN");
+    if(pill) pill.textContent = `${N.toLocaleString()} users (from CSV)`;
+    const mp = document.getElementById("pillModel");
+    if(mp) mp.textContent = modelChosen ? "game-pltv-scores.csv (loaded)" : "game-pltv-scores.csv (missing/empty)";
+
+    return true;
+  } catch(err){
+    console.warn("CSV load failed, falling back to synthetic dataset:", err);
+    return false;
+  }
+}
+/* Wrapper: prefer CSV dataset, else synthetic */
+async function generateDataset(seed=1337){
+  const ok = await tryLoadGameCSVs();
+  if(ok) return;
+  generateSyntheticDataset(seed);
+  const pill = document.getElementById("pillN");
+  if(pill) pill.textContent = `${N.toLocaleString()} users (synthetic)`;
+}
+
+function generateSyntheticDataset(seed=1337){
+  const rng = mulberry32(seed);
+  users = [];
+
+  for(let i=0;i<N;i++){
+    // segment: affects how value accrues and what signals correlate
+    // 0 = impulse spenders, 1 = grinders, 2 = social late bloomers
+    const segRoll = rng();
+    const segment = segRoll < 0.36 ? 0 : (segRoll < 0.72 ? 1 : 2);
+
+    const latent = 0.9*randn(rng) + (rng()<0.10 ? 2.2 + 0.6*randn(rng) : 0);
+
+    // early proxies differ by segment
+    const engagementBase = segment===1 ? 0.58 : (segment===2 ? 0.52 : 0.45);
+    const spendBase = segment===0 ? 0.48 : (segment===2 ? 0.30 : 0.34);
+
+    const engagement = clamp(engagementBase + 0.18*randn(rng) + 0.12*(latent>1.0), 0, 1);
+    const earlySpendProxy = clamp(spendBase + 0.22*randn(rng) + 0.18*(latent>0.8), 0, 1);
+
+    // lateSignal: strongest in segment 2 (social late bloomers), moderate in segment 1, weakest in segment 0
+    const lateSignalBase = segment===2 ? 0.40 : (segment===1 ? 0.30 : 0.18);
+    const lateSignal = clamp(
+      lateSignalBase
+      + 0.55*(latent>1.0)
+      + 0.22*engagement
+      - 0.55*earlySpendProxy
+      + 0.16*randn(rng),
+      0, 1
+    );
+
+    // TRUE LTV90: dominated by lateSignal; segment weights differ => more realistic spread
+    const segLateW = segment===2 ? 135 : (segment===1 ? 115 : 90);
+    const segEngW  = segment===1 ? 30 : 22;
+    const segSpendW= segment===0 ? 20 : 10;
+
+    const ltv90 = Math.max(0,
+      5
+      + segLateW*lateSignal
+      + segEngW*engagement
+      + segSpendW*earlySpendProxy
+      + 4*randn(rng) // small noise
+    );
+
+    // LTV7 baseline: early proxy; segment 2 is intentionally under-captured
+    const segSpend7 = segment===0 ? 22 : 16;
+    const segEng7   = segment===1 ? 14 : 10;
+    const segPenalty= segment===2 ? 6 : 0; // late bloomers look worse early
+
+    const ltv7 = Math.max(0,
+      2
+      + segSpend7*earlySpendProxy
+      + segEng7*engagement
+      - segPenalty*(lateSignal>0.55 ? 1 : 0)
+      + 6*randn(rng)
+    );
+
+    const heuristic_score = (0.70*engagement + 0.30*earlySpendProxy)*100;
+
+    users.push({
+      user_id: "U"+String(i+1).padStart(5,"0"),
+      segment,
+      engagement, earlySpendProxy, lateSignal,
+      ltv7,
+      ltv90_actual: ltv90,
+      heuristic_score,
+      whale90: 0,
+      pltv_pred: NaN
+    });
+  }
+
+  const whaleCut = quantile(users.map(u=>u.ltv90_actual), 0.90);
+  users.forEach(u=>u.whale90 = (u.ltv90_actual>=whaleCut) ? 1 : 0);
+
+  $("pillN").textContent = `${N.toLocaleString()} users`;
+}
+
+/* --------- Train models: stronger separation + realism --------- */
+function trainThreeModels(runSeed){
+  const rngW = mulberry32(runSeed + 101);
+  const rngM = mulberry32(runSeed + 202);
+  const rngS = mulberry32(runSeed + 303);
+
+  // weak: mostly early proxies + more noise
+  const weak = users.map(u=>{
+    const proxy = 0.55*u.engagement + 0.45*u.earlySpendProxy + 0.05*(u.segment===0 ? 1 : 0);
+    return Math.max(0, (proxy + 0.30*randn(rngW))*85);
+  });
+
+  // medium: mixes lateSignal but not perfect + moderate noise
+  const medium = users.map(u=>{
+    const proxy = 0.42*u.engagement + 0.28*u.earlySpendProxy + 0.42*u.lateSignal + 0.04*(u.segment===2 ? 1 : 0);
+    return Math.max(0, (proxy + 0.15*randn(rngM))*92);
+  });
+
+  // strong: aligns with lateSignal (dominant true driver) + tiny noise
+  const strong = users.map(u=>{
+    const proxy = 1.15*u.lateSignal + 0.10*u.engagement + 0.03*u.earlySpendProxy + 0.03*(u.segment===2 ? 1 : 0);
+    return Math.max(0, (proxy + 0.01*randn(rngS))*105);
+  });
+
+  return { weak, medium, strong };
+}
+
+function applyModelPredictions(predArray){
+  for(let i=0;i<users.length;i++) users[i].pltv_pred = predArray[i];
+}
+
+/* --------- Ranking & Offline metrics --------- */
+function rankUsers(metric){
+  const arr = [...users];
+  if(metric==="pltv") arr.sort((a,b)=>(b.pltv_pred - a.pltv_pred));
+  else if(metric==="ltv7") arr.sort((a,b)=>b.ltv7 - a.ltv7);
+  else if(metric==="heur") arr.sort((a,b)=>b.heuristic_score - a.heuristic_score);
+  return arr;
+}
+
+function offlineMetrics(metric, topKpct){
+  const K = Math.max(1, Math.floor(N*(topKpct/100)));
+  if(metric==="pltv" && !modelChosen){
+    return { metric, K, revCaptured: null, precisionK: null, spearman: null };
+  }
+  const ranked = rankUsers(metric);
+  const top = ranked.slice(0,K);
+
+  const totalRev = users.reduce((s,u)=>s+u.ltv90_actual,0);
+  const topRev = top.reduce((s,u)=>s+u.ltv90_actual,0);
+  const revCaptured = topRev / totalRev;
+
+  const whalesInTop = top.reduce((s,u)=>s+u.whale90,0);
+  const precisionK = whalesInTop / K;
+
+  // spearman vs true rank
+  const metricRank = new Map();
+  ranked.forEach((u, idx)=>metricRank.set(u.user_id, idx+1));
+  const actualRanked = [...users].sort((a,b)=>b.ltv90_actual - a.ltv90_actual);
+  const actualRank = new Map();
+  actualRanked.forEach((u, idx)=>actualRank.set(u.user_id, idx+1));
+  let sumd2 = 0;
+  for(const u of users){
+    const d = (metricRank.get(u.user_id) - actualRank.get(u.user_id));
+    sumd2 += d*d;
+  }
+  const n = users.length;
+  const spearman = 1 - (6*sumd2)/(n*(n*n-1));
+
+  return { metric, K, revCaptured, precisionK, spearman };
+}
+
+function liftCurve(metric, steps=20){
+  if(metric==="pltv" && !modelChosen) return null;
+
+  const ranked = rankUsers(metric);
+
+  const totalRev = users.reduce((s,u)=>s+u.ltv90_actual,0);
+
+  // Add slight "measurement noise" to look more realistic without changing ordering too much:
+  // we mix in a tiny segment-dependent curve shape to avoid near-parallel lines.
+  const segMix = (metric==="pltv") ? 0.00 : (metric==="ltv7" ? 0.02 : 0.03);
+
+  const points = [];
+  for(let i=1;i<=steps;i++){
+    const pct = i/steps;
+    const cut = Math.max(1, Math.floor(N*pct));
+    const top = ranked.slice(0,cut);
+
+    let topRev = 0;
+    for(const u of top){
+      const segAdj = (u.segment===2 ? 1.0+segMix : (u.segment===0 ? 1.0-segMix : 1.0));
+      topRev += u.ltv90_actual * segAdj;
+    }
+    points.push({ x:pct, y: clamp(topRev/totalRev, 0, 1) });
+  }
+  return points;
+}
+
+/* --------- Online simulation: more varied curves + randomness per send --------- */
+function makeCumulativeCurve(revenue90, curveSeed, style){
+  // style: {k, earlyBias, jitter}
+  const rng = mulberry32(curveSeed);
+
+  // days 0..90
+  const pts = [];
+  let prev = 0;
+
+  for(let d=0; d<=90; d+=3){
+    const t = d/90;
+
+    // Base curve: flexible saturation family
+    // earlyBias > 0 speeds early revenue; <0 delays revenue
+    const k = style.k; // 1.3..3.2
+    const bias = style.earlyBias; // -0.25..+0.25
+    const tt = clamp(t + bias*(t*(1-t)), 0, 1);
+
+    const denom = 1 - Math.exp(-k);
+    let cum = (1 - Math.exp(-k*tt)) / denom;
+
+    // add small jitter but keep monotonic
+    const j = style.jitter * (0.6 + 0.4*(1-tt)) * randn(rng); // more jitter early
+    cum = clamp(cum + j, 0, 1);
+
+    const y = Math.max(prev, revenue90 * cum);
+    prev = y;
+    pts.push({ day:d, revenue:y });
+  }
+
+  // ensure last point hits revenue90
+  pts[pts.length-1].revenue = revenue90;
+  return pts;
+}
+
+function simulateOnline(metricKey, topKpct, budget, baseCpi, sensitivity, sendNonce){
+  if(metricKey==="pltv" && !modelChosen) return null;
+
+  const off = offlineMetrics(metricKey, topKpct);
+  const base = offlineMetrics("ltv7", topKpct);
+
+  const sens = sensitivity;
+  const delta = (off.revCaptured - base.revCaptured);
+
+  // RNG: changes every send (sendNonce), every K, every seed
+  const seedBase =
+    (sendNonce || Date.now()) ^
+    (activeRunId * 2654435761) ^
+    (Math.floor(topKpct*1000) * 97531) ^
+    (metricKey.charCodeAt(0) * 99991);
+
+  const rng = mulberry32(seedBase);
+
+  // Platform randomness
+  const platformNoise = 0.08 * randn(rng);
+
+  // ROAS/CPI response
+  const roasBoost = 1 + sens*(1.65*delta) + platformNoise;
+  const cpiBoost  = 1 - sens*(0.55*delta) + (0.04*randn(rng));
+
+  const cpi = clamp(baseCpi * cpiBoost, baseCpi*0.55, baseCpi*1.70);
+  const installs = Math.floor(budget / cpi);
+
+  // RPI varies by seed quality + randomness
+  const baseRPI = 6.6 + 0.4*rng(); // some day-to-day variation
+  const rpi = clamp(baseRPI * roasBoost, 3.0, 14.0);
+
+  const revenue90 = installs * rpi;
+  const roas = revenue90 / budget;
+  const profit = revenue90 - budget;
+
+  // Curve style varies per seed strategy (for realism)
+  const style = (() => {
+    // baseline tends to monetize steadily; random tends to be weaker & noisier
+    let k = 2.0 + 0.6*rng();
+    let earlyBias = (rng()-0.5)*0.25;
+    let jitter = 0.02 + 0.02*rng();
+
+    if(metricKey==="pltv") { k += 0.35; earlyBias += 0.06; jitter *= 0.9; }
+    if(metricKey==="ltv7") { k += 0.10; earlyBias += 0.02; }
+    if(metricKey==="heur") { k -= 0.05; earlyBias -= 0.01; }
+
+    return { k: clamp(k, 1.2, 3.4), earlyBias: clamp(earlyBias, -0.25, 0.25), jitter: clamp(jitter, 0.005, 0.05) };
+  })();
+
+  const curveSeed = seedBase ^ 0xABCDEF;
+  const curve = makeCumulativeCurve(revenue90, curveSeed, style);
+
+  return { key: metricKey, offline: off, budget, cpi, installs, revenue90, roas, profit, curve };
+}
+
+/* --------- Charts --------- */
+function drawChart(canvas, series, options){
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  const padL=50, padR=18, padT=16, padB=34;
+  const x0=padL, y0=H-padB, x1=W-padR, y1=padT;
+
+  ctx.strokeStyle="rgba(255,255,255,0.18)";
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(x0,y0); ctx.lineTo(x1,y0);
+  ctx.moveTo(x0,y0); ctx.lineTo(x0,y1);
+  ctx.stroke();
+
+  ctx.font="12px ui-sans-serif";
+  const yTicks=5;
+  for(let i=0;i<=yTicks;i++){
+    const t=i/yTicks;
+    const y = y0 - t*(y0-y1);
+    ctx.strokeStyle="rgba(255,255,255,0.08)";
+    ctx.beginPath(); ctx.moveTo(x0,y); ctx.lineTo(x1,y); ctx.stroke();
+    const val = options.yMin + t*(options.yMax-options.yMin);
+    ctx.fillStyle="rgba(255,255,255,0.45)";
+    ctx.fillText(options.yFmt(val), 8, y+4);
+  }
+  const xTicks=5;
+  for(let i=0;i<=xTicks;i++){
+    const t=i/xTicks;
+    const x = x0 + t*(x1-x0);
+    ctx.strokeStyle="rgba(255,255,255,0.08)";
+    ctx.beginPath(); ctx.moveTo(x,y0); ctx.lineTo(x,y1); ctx.stroke();
+    const val = options.xMin + t*(options.xMax-options.xMin);
+    ctx.fillStyle="rgba(255,255,255,0.45)";
+    ctx.fillText(options.xFmt(val), x-10, H-10);
+  }
+
+  if(options.title){
+    ctx.fillStyle="rgba(207,227,255,0.9)";
+    ctx.font="13px ui-sans-serif";
+    ctx.fillText(options.title, x0, 14);
+  }
+
+  series.forEach(s=>{
+    ctx.strokeStyle=s.color;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    s.data.forEach((p, idx)=>{
+      const x = x0 + (p.x-options.xMin)/(options.xMax-options.xMin) * (x1-x0);
+      const y = y0 - (p.y-options.yMin)/(options.yMax-options.yMin) * (y0-y1);
+      if(idx===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+
+    const lastP = s.data[s.data.length-1];
+    const ex = x0 + (lastP.x-options.xMin)/(options.xMax-options.xMin) * (x1-x0);
+    const ey = y0 - (lastP.y-options.yMin)/(options.yMax-options.yMin) * (y0-y1);
+    ctx.fillStyle=s.color;
+    ctx.beginPath(); ctx.arc(ex,ey,3.2,0,Math.PI*2); ctx.fill();
+  });
+
+  ctx.fillStyle="rgba(255,255,255,0.55)";
+  ctx.font="12px ui-sans-serif";
+  ctx.fillText(options.xLabel||"", (x0+x1)/2 - 60, H-6);
+  ctx.save();
+  ctx.translate(14,(y0+y1)/2 + 30);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText(options.yLabel||"", 0, 0);
+  ctx.restore();
+}
+
+/* --------- UI helpers --------- */
+function humanLabel(metricKey){
+  if(metricKey==="pltv") return "pLTV (selected)";
+  if(metricKey==="ltv7") return "LTV7 (baseline)";
+  if(metricKey==="heur") return "Heuristic";
+  return metricKey;
+}
+function metricPill(metricKey){
+  if(metricKey==="pltv") return `<span class="pill good">pLTV</span>`;
+  if(metricKey==="ltv7") return `<span class="pill blue">LTV7</span>`;
+  if(metricKey==="heur") return `<span class="pill warn">Heuristic</span>`;
+  return `<span class="pill">${metricKey}</span>`;
+}
+function setTab(tab){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.tab===tab));
+  $("panel-overview").style.display = (tab==="overview") ? "" : "none";
+  $("panel-online").style.display   = (tab==="online") ? "" : "none";
+  $("panel-data").style.display     = (tab==="data") ? "" : "none";
+}
+function setStep2Enabled(enabled){
+  modelChosen = enabled;
+  ["topk","budget","baseCpi","sensitivity","seedPLTV","seedLTV7","seedHeur","sendBtn"].forEach(id=>{
+    $(id).disabled = !enabled;
+  });
+}
+
+/* --------- Rendering --------- */
+function renderRunsSelect(){}
+function renderModelList(){}
+
+function renderAllOffline(){
+  const topKpct = clamp(parseFloat($("topk").value||5), 1, 50);
+
+  const pltv = liftCurve("pltv");
+  const ltv7 = liftCurve("ltv7");
+  const heur = liftCurve("heur");
+  const series = [
+    ...(pltv ? [{ color:"rgba(71,209,140,0.95)", data: pltv }] : []),
+    { color:"rgba(122,162,255,0.95)", data: ltv7 },
+    { color:"rgba(255,204,102,0.95)", data: heur }
+  ];
+
+  drawChart($("liftCanvas"), series, {
+    xMin:0, xMax:1, yMin:0, yMax:1,
+    xFmt:(v)=>Math.round(v*100)+"%",
+    yFmt:(v)=>Math.round(v*100)+"%",
+    xLabel:"Top % of users selected",
+    yLabel:"% of total D90 revenue captured",
+    title:"Offline lift curve (pre-ads)"
+  });
+
+  const rows = ["pltv","ltv7","heur"].map(m=>offlineMetrics(m, topKpct));
+  $("offlineTable").innerHTML = rows.map(r=>{
+    const tag = (r.metric==="pltv") ? `<span class="pill good" style="margin-left:6px">model</span>`
+              : (r.metric==="ltv7") ? `<span class="pill blue" style="margin-left:6px">baseline</span>`
+              : (r.metric==="heur") ? `<span class="pill warn" style="margin-left:6px">benchmark</span>`
+              : `<span class="pill" style="margin-left:6px">sanity</span>`;
+    const v = (x)=> (x==null ? "—" : fmtPct(x));
+    const s = (x)=> (x==null ? "—" : x.toFixed(2));
+    return `
+      <tr>
+        <td>${humanLabel(r.metric)} ${tag}</td>
+        <td class="right">${v(r.revCaptured)}</td>
+        <td class="right">${v(r.precisionK)}</td>
+        <td class="right">${s(r.spearman)}</td>
+      </tr>
+    `;
+  }).join("");
+
+  if(!modelChosen){
+    $("offlineNote").innerHTML = `Load <b>game-pltv-scores.csv</b> to compute <b>pLTV</b> offline metrics.`;
+  } else {
+    const p = rows.find(x=>x.metric==="pltv");
+    const b = rows.find(x=>x.metric==="ltv7");
+    const d = (p.revCaptured - b.revCaptured);
+    $("offlineNote").innerHTML =
+      `Top-K = <b>${p.K.toLocaleString()}</b> • model = <b>CSV pLTV scores</b> •
+       pLTV vs baseline lift @K: <span class="pill ${d>=0?'good':'bad'}">${(d>=0?'+':'')}${fmtPct(d)}</span>`;
+  }
+}
+
+function renderDataTable(){
+  $("dataTable").innerHTML = users.slice(0,25).map(u=>`
+    <tr>
+      <td class="mono">${u.user_id}</td>
+      <td class="right">${u.ltv7.toFixed(1)}</td>
+      <td class="right">${u.ltv90_actual.toFixed(1)}</td>
+      <td class="right">${(isNaN(u.pltv_pred) ? "—" : u.pltv_pred.toFixed(1))}</td>
+      <td class="right">${u.heuristic_score.toFixed(1)}</td>
+      <td class="right">${u.whale90 ? '<span class="pill good">1</span>' : '<span class="pill">0</span>'}</td>
+    </tr>
+  `).join("");
+}
+
+/* --------- Online contract + rendering --------- */
+function getSelectedSeedKeys(){
+  const keys=[];
+  if($("seedPLTV").checked) keys.push("pltv");
+  if($("seedLTV7").checked) keys.push("ltv7");
+  if($("seedHeur").checked) keys.push("heur");
+  return keys;
+}
+function renderContractTable(){
+  if(lastContract.length===0){
+    $("contractTable").innerHTML = `<tr><td colspan="4" class="small" style="color:var(--muted);">No contract yet. Click <b>Send selected seeds</b>.</td></tr>`;
+    return;
+  }
+  const statusPill = (s)=>{
+    if(s==="SENT") return `<span class="pill blue">SENT</span>`;
+    if(s==="RESULTS_RECEIVED") return `<span class="pill good">RESULTS_RECEIVED</span>`;
+    return `<span class="pill">${s}</span>`;
+  };
+  $("contractTable").innerHTML = lastContract.map(c=>`
+    <tr>
+      <td>${metricPill(c.key)} ${humanLabel(c.key)}</td>
+      <td>${statusPill(c.status)}</td>
+      <td class="right mono">${c.sentAt ? fmtTime(c.sentAt) : "—"}</td>
+      <td class="right mono">${c.resultAt ? fmtTime(c.resultAt) : "—"}</td>
+    </tr>
+  `).join("");
+}
+function renderOnlineEmpty(){
+  $("onlineTable").innerHTML = `<tr><td colspan="7" class="small" style="color:var(--muted);">No activation results yet. Click <b>Send selected seeds</b>.</td></tr>`;
+  drawChart($("curveCanvas"), [], {
+    xMin:0, xMax:90, yMin:0, yMax:1,
+    xFmt:(v)=>v, yFmt:(v)=>v,
+    xLabel:"Days since install", yLabel:"Cumulative revenue",
+    title:"Online revenue curve (post-ads) — waiting for results"
+  });
+}
+function renderOnlineResults(results){
+  $("onlineTable").innerHTML = results.map(r=>{
+    const roasCls = r.roas>=1 ? "good" : "bad";
+    const profCls = r.profit>=0 ? "good" : "bad";
+    return `
+      <tr>
+        <td>${metricPill(r.key)} ${humanLabel(r.key)}</td>
+        <td class="right">${fmtMoney(r.budget)}</td>
+        <td class="right">${fmtMoney2(r.cpi)}</td>
+        <td class="right">${r.installs.toLocaleString()}</td>
+        <td class="right">${fmtMoney(r.revenue90)}</td>
+        <td class="right"><span class="pill ${roasCls}">${r.roas.toFixed(2)}x</span></td>
+        <td class="right"><span class="pill ${profCls}">${fmtMoney(r.profit)}</span></td>
+      </tr>
+    `;
+  }).join("");
+
+  const maxRev = Math.max(...results.map(r=>r.revenue90), 1);
+  const palette = {
+    pltv:"rgba(71,209,140,0.95)",
+    ltv7:"rgba(122,162,255,0.95)",
+    heur:"rgba(255,204,102,0.95)",
+  };
+  const series = results.map(r=>({
+    color: palette[r.key] || "rgba(207,227,255,0.9)",
+    data: r.curve.map(p=>({x:p.day, y:p.revenue}))
+  }));
+
+  drawChart($("curveCanvas"), series, {
+    xMin:0, xMax:90, yMin:0, yMax:maxRev,
+    xFmt:(v)=>v,
+    yFmt:(v)=>"$"+Math.round(v/1000)+"k",
+    xLabel:"Days since install",
+    yLabel:"Cumulative revenue",
+    title:"Online revenue accumulation (post-ads) — per seed"
+  });
+}
+
+/* --------- Model score refresh --------- */
+async function reloadScores(){
+  // Re-fetch only the pLTV scores file and apply to existing users.
+  try{
+    const scoresTxt = await fetchText("./game-pltv-scores.csv");
+    const pltvScoresRows = parseCSV(scoresTxt);
+    const scoreById = new Map();
+    for(const r of pltvScoresRows){
+      const uid = r.game_user_id;
+      const pred = parseFloat(r.pltv_pred || "0");
+      if(!uid) continue;
+      scoreById.set(uid, isNaN(pred) ? 0 : pred);
+    }
+    let hit = 0;
+    for(const u of users){
+      if(scoreById.has(u.user_id)){
+        u.pltv_pred = scoreById.get(u.user_id);
+        hit++;
+      }
+    }
+    modelChosen = hit >= Math.min(100, Math.floor(users.length * 0.5));
+    const mp = document.getElementById("pillModel");
+    if(mp) mp.textContent = modelChosen ? "game-pltv-scores.csv (reloaded)" : "game-pltv-scores.csv (missing/empty)";
+    renderAllOffline();
+    renderDataTable();
+    showMsg(`✅ Reloaded pLTV scores (${hit.toLocaleString()} users).`, "ok");
+  } catch(err){
+    showMsg(`⚠️ Could not load game-pltv-scores.csv. Run your generator / retrain to create it.`, "info");
+    console.warn(err);
+  }
+}
+
+/* --------- Export --------- */
+function exportJSON(){
+  const topKpct = clamp(parseFloat($("topk").value||5),1,50);
+  const payload = {
+    meta: { game:"Ballistar", N, lastSendNonce, modelSource:"game-pltv-scores.csv" },
+    topKpct,
+    offline_metrics: ["pltv","ltv7","heur"].map(m=>offlineMetrics(m, topKpct)),
+    activation_contract: lastContract,
+    online_results: lastOnlineResults.map(r=>({
+      key:r.key, cpi:r.cpi, installs:r.installs, revenue90:r.revenue90, roas:r.roas, profit:r.profit
+    }))
+  };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url; a.download=`ballistar_seed_eval_${Date.now()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* --------- Events --------- */
+document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click", ()=>setTab(t.dataset.tab)));
+
+$("retrainBtn").addEventListener("click", reloadScores);
+
+$("exportBtn").addEventListener("click", exportJSON);
+
+$("topk").addEventListener("change", ()=>{
+  // Offline always updates for any K.
+  renderAllOffline();
+  // Online requires resend because Top-K changes the seed list. Keep existing results but show hint via message.
+  if(lastContract.length>0){
+    showMsg(`ℹ️ Top-K changed. Click <b>Send selected seeds</b> again to get new online results for K=${$("topk").value}%.`, "info");
+  }
+});
+
+$("sensitivity").addEventListener("input", (e)=> setSensitivityPill(parseFloat(e.target.value)/100));
+
+$("sendBtn").addEventListener("click", ()=>{
+  if(!modelChosen){
+    showMsg(`⚠️ Step 2 is locked. Load pLTV scores in Step 1 first.`, "info");
+    return;
+  }
+  const selected = getSelectedSeedKeys();
+  if(selected.length===0){
+    showMsg(`⚠️ Please select at least one seed.`, "info");
+    return;
+  }
+
+  const topKpct = clamp(parseFloat($("topk").value||5), 1, 50);
+  const budget = Math.max(1000, parseFloat($("budget").value||20000));
+  const baseCpi = Math.max(0.2, parseFloat($("baseCpi").value||1.6));
+  const sens = clamp(parseFloat($("sensitivity").value||60)/100, 0, 1);
+
+
+  // Randomize each send (even with same K): nonce changes RNG seeds
+  lastSendNonce = Date.now() ^ Math.floor(Math.random()*1e9);
+
+  // Activation contract
+  const now = Date.now();
+  lastContract = selected.map((k, idx)=>({
+    key: k, status: "SENT", sentAt: now + idx*180, resultAt: null
+  }));
+  renderContractTable();
+
+  // Create run object (so contractRunMeta can show a stable run id)
+  const run = {
+    id: ++runCounter,
+    ts: Date.now(),
+    modelKind,
+    topKpct,
+    budget,
+    baseCpi,
+    sens,
+    sendNonce: lastSendNonce,
+    seedsCount: selected.length,
+  };
+
+  // Compute results
+  let results = selected
+    .map(k=>simulateOnline(k, topKpct, budget, baseCpi, sens, lastSendNonce))
+    .filter(Boolean);
+
+
+  lastOnlineResults = results;
+
+  // Mark results received with timestamps
+  lastContract = lastContract.map((c, idx)=>({
+    ...c,
+    status: "RESULTS_RECEIVED",
+    resultAt: c.sentAt + 950 + idx*240
+  }));
+  renderContractTable();
+
+  renderOnlineResults(results);
+
+  const el = $("contractRunMeta");
+  if (el) {
+    el.textContent =
+      `Run #${run.id} • model: ${String(modelKind || "pltv").toUpperCase()} • topK: ${topKpct}% • send: ${String(lastSendNonce).slice(-6)}`;
+  }
+
+  showMsg(`🚀 Sent <b>${selected.length}</b> seed(s). Results are randomized per send and updated for K=${topKpct}%.`, "ok");
+  setTab("online");
+});
+
+/* --------- Init --------- */
+(async function init(){
+  await generateDataset(1337);
+
+  // Step 2 enabled when scores are present
+  setStep2Enabled(!!modelChosen);
+  setSensitivityPill(parseFloat($("sensitivity").value)/100);
+
+  // First render
+  renderAllOffline();
+  renderDataTable();
+  renderContractTable();
+  renderOnlineEmpty();
+
+  showMsg(modelChosen
+    ? `Ready. pLTV loaded from <b>game-pltv-scores.csv</b>.`
+    : `Ready. Missing <b>game-pltv-scores.csv</b> — click <b>Reload scores</b> after generating it.`, "info");
+})();</script>
+</body>
+</html>

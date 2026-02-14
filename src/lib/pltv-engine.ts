@@ -61,160 +61,26 @@ type PlayerArchetype = "whale" | "dolphin" | "minnow" | "free_engaged" | "free_c
 
 interface ArchetypeConfig {
   weight: number;
-  sessionsPerDay: [number, number];
-  sessionLengthMin: [number, number];
-  maxLevelD7: [number, number];
-  questStepsD7: [number, number];
-  pvpD7: [number, number];
-  pveD7: [number, number];
-  guildJoinProb: number;
-  guildJoinHours: [number, number];
-  friendsD7: [number, number];
-  chatD7: [number, number];
-  gachaD7: [number, number];
-  shopViewsD7: [number, number];
-  payProb: number;
-  txnCountD7: [number, number];
-  revenueD7: [number, number];
-  revenueD60: [number, number];
+  sessN: number; // total sessions (1 or 2)
+  sLen: [number, number];
+  lvl: [number, number];
+  quest: [number, number]; pvp: [number, number]; pve: [number, number];
+  guildP: number; friends: [number, number]; chat: [number, number];
+  gacha: [number, number]; shop: [number, number]; iap: [number, number];
+  softE: [number, number]; softS: [number, number];
+  hardE: [number, number]; hardS: [number, number];
+  payProb: number; txnCountD7: [number, number]; revenueD7: [number, number];
   churnD14Prob: number;
-  nightPlayRatio: [number, number];
   activeDays: [number, number];
 }
 
 const ARCHETYPES: Record<PlayerArchetype, ArchetypeConfig> = {
-  whale: {
-    weight: 0.03,
-    sessionsPerDay: [4, 8],
-    sessionLengthMin: [30, 120],
-    maxLevelD7: [45, 70],
-    questStepsD7: [40, 80],
-    pvpD7: [15, 40],
-    pveD7: [30, 80],
-    guildJoinProb: 0.95,
-    guildJoinHours: [2, 24],
-    friendsD7: [5, 20],
-    chatD7: [30, 150],
-    gachaD7: [15, 60],
-    shopViewsD7: [20, 50],
-    payProb: 1.0,
-    txnCountD7: [5, 20],
-    revenueD7: [100, 800],
-    revenueD60: [500, 5000],
-    churnD14Prob: 0.02,
-    nightPlayRatio: [0.2, 0.5],
-    activeDays: [7, 7],
-  },
-  dolphin: {
-    weight: 0.12,
-    sessionsPerDay: [2, 5],
-    sessionLengthMin: [20, 60],
-    maxLevelD7: [30, 55],
-    questStepsD7: [25, 55],
-    pvpD7: [5, 20],
-    pveD7: [15, 40],
-    guildJoinProb: 0.75,
-    guildJoinHours: [12, 72],
-    friendsD7: [2, 10],
-    chatD7: [10, 60],
-    gachaD7: [5, 20],
-    shopViewsD7: [10, 30],
-    payProb: 0.85,
-    txnCountD7: [2, 8],
-    revenueD7: [10, 100],
-    revenueD60: [50, 500],
-    churnD14Prob: 0.08,
-    nightPlayRatio: [0.15, 0.4],
-    activeDays: [5, 7],
-  },
-  minnow: {
-    weight: 0.15,
-    sessionsPerDay: [1, 3],
-    sessionLengthMin: [10, 40],
-    maxLevelD7: [20, 40],
-    questStepsD7: [15, 35],
-    pvpD7: [2, 10],
-    pveD7: [5, 20],
-    guildJoinProb: 0.5,
-    guildJoinHours: [24, 120],
-    friendsD7: [1, 5],
-    chatD7: [3, 20],
-    gachaD7: [2, 8],
-    shopViewsD7: [5, 15],
-    payProb: 0.6,
-    txnCountD7: [1, 3],
-    revenueD7: [1, 15],
-    revenueD60: [5, 60],
-    churnD14Prob: 0.2,
-    nightPlayRatio: [0.1, 0.35],
-    activeDays: [4, 7],
-  },
-  free_engaged: {
-    weight: 0.25,
-    sessionsPerDay: [2, 5],
-    sessionLengthMin: [15, 50],
-    maxLevelD7: [25, 50],
-    questStepsD7: [20, 50],
-    pvpD7: [5, 25],
-    pveD7: [10, 35],
-    guildJoinProb: 0.6,
-    guildJoinHours: [24, 96],
-    friendsD7: [2, 8],
-    chatD7: [5, 40],
-    gachaD7: [1, 5],
-    shopViewsD7: [3, 12],
-    payProb: 0,
-    txnCountD7: [0, 0],
-    revenueD7: [0, 0],
-    revenueD60: [0, 0],
-    churnD14Prob: 0.15,
-    nightPlayRatio: [0.1, 0.4],
-    activeDays: [4, 7],
-  },
-  free_casual: {
-    weight: 0.30,
-    sessionsPerDay: [1, 2],
-    sessionLengthMin: [5, 20],
-    maxLevelD7: [8, 25],
-    questStepsD7: [5, 20],
-    pvpD7: [0, 5],
-    pveD7: [2, 10],
-    guildJoinProb: 0.2,
-    guildJoinHours: [48, 168],
-    friendsD7: [0, 3],
-    chatD7: [0, 10],
-    gachaD7: [0, 3],
-    shopViewsD7: [0, 5],
-    payProb: 0,
-    txnCountD7: [0, 0],
-    revenueD7: [0, 0],
-    revenueD60: [0, 0],
-    churnD14Prob: 0.4,
-    nightPlayRatio: [0.05, 0.3],
-    activeDays: [2, 5],
-  },
-  churned: {
-    weight: 0.15,
-    sessionsPerDay: [1, 2],
-    sessionLengthMin: [3, 15],
-    maxLevelD7: [3, 15],
-    questStepsD7: [2, 10],
-    pvpD7: [0, 2],
-    pveD7: [0, 5],
-    guildJoinProb: 0.05,
-    guildJoinHours: [100, 200],
-    friendsD7: [0, 1],
-    chatD7: [0, 3],
-    gachaD7: [0, 1],
-    shopViewsD7: [0, 2],
-    payProb: 0,
-    txnCountD7: [0, 0],
-    revenueD7: [0, 0],
-    revenueD60: [0, 0],
-    churnD14Prob: 0.95,
-    nightPlayRatio: [0.05, 0.2],
-    activeDays: [1, 3],
-  },
+  whale:        { weight: 0.03, sessN: 1, sLen: [40,90],  lvl: [40,70], quest: [1,3], pvp: [1,2], pve: [1,2], guildP: 0.95, friends: [0,1], chat: [1,2], gacha: [1,2], shop: [0,1], iap: [0,1], softE: [1,2], softS: [0,1], hardE: [0,1], hardS: [0,1], payProb: 1.0,  txnCountD7: [3,10], revenueD7: [100,800], churnD14Prob: 0.02, activeDays: [6,7] },
+  dolphin:      { weight: 0.12, sessN: 1, sLen: [20,50],  lvl: [25,50], quest: [1,2], pvp: [0,1], pve: [0,1], guildP: 0.70, friends: [0,1], chat: [0,1], gacha: [0,1], shop: [0,1], iap: [0,1], softE: [0,1], softS: [0,1], hardE: [0,1], hardS: [0,0], payProb: 0.85, txnCountD7: [1,5],  revenueD7: [10,100],  churnD14Prob: 0.08, activeDays: [4,7] },
+  minnow:       { weight: 0.15, sessN: 1, sLen: [10,30],  lvl: [15,35], quest: [0,1], pvp: [0,1], pve: [0,1], guildP: 0.40, friends: [0,1], chat: [0,1], gacha: [0,1], shop: [0,1], iap: [0,0], softE: [0,1], softS: [0,1], hardE: [0,0], hardS: [0,0], payProb: 0.55, txnCountD7: [1,2],  revenueD7: [1,15],    churnD14Prob: 0.20, activeDays: [3,6] },
+  free_engaged: { weight: 0.25, sessN: 1, sLen: [15,40],  lvl: [20,45], quest: [0,1], pvp: [0,1], pve: [0,1], guildP: 0.50, friends: [0,1], chat: [0,1], gacha: [0,1], shop: [0,0], iap: [0,0], softE: [0,1], softS: [0,1], hardE: [0,1], hardS: [0,0], payProb: 0,    txnCountD7: [0,0],  revenueD7: [0,0],     churnD14Prob: 0.15, activeDays: [3,6] },
+  free_casual:  { weight: 0.30, sessN: 1, sLen: [5,15],   lvl: [5,20],  quest: [0,1], pvp: [0,0], pve: [0,0], guildP: 0.10, friends: [0,0], chat: [0,0], gacha: [0,0], shop: [0,0], iap: [0,0], softE: [0,1], softS: [0,0], hardE: [0,0], hardS: [0,0], payProb: 0,    txnCountD7: [0,0],  revenueD7: [0,0],     churnD14Prob: 0.40, activeDays: [1,4] },
+  churned:      { weight: 0.15, sessN: 1, sLen: [3,10],   lvl: [2,10],  quest: [0,0], pvp: [0,0], pve: [0,0], guildP: 0.02, friends: [0,0], chat: [0,0], gacha: [0,0], shop: [0,0], iap: [0,0], softE: [0,0], softS: [0,0], hardE: [0,0], hardS: [0,0], payProb: 0,    txnCountD7: [0,0],  revenueD7: [0,0],     churnD14Prob: 0.90, activeDays: [1,2] },
 };
 
 function pickArchetype(): PlayerArchetype {
@@ -229,7 +95,7 @@ function pickArchetype(): PlayerArchetype {
 
 // ─── Synthetic Data Generation ───────────────────────────────────────────────
 
-export function generateGameData(numPlayers: number = 2000): {
+export function generateGameData(numPlayers: number = 10000): {
   players: GamePlayer[];
   events: GameEvent[];
   payments: PaymentTxn[];
@@ -238,6 +104,12 @@ export function generateGameData(numPlayers: number = 2000): {
   resetSeed(42);
 
   const baseDate = new Date("2024-10-01T00:00:00Z");
+  const DUNGEON_NAMES = ["cruma", "dragon_v", "ant_nest", "tower_ins", "forge", "plains"];
+  const CHAT_CH = ["world", "guild", "party", "whisper", "trade"];
+  const SOFT_SRC = ["quest", "dungeon", "daily", "sell", "arena"];
+  const HARD_SRC = ["achieve", "event", "comp", "free"];
+  const SPEND_TGT = ["gear", "skill", "tp", "revive", "shop"];
+  const GACHA_T = ["weapon", "armor", "pet", "costume"];
   const players: GamePlayer[] = [];
   const events: GameEvent[] = [];
   const payments: PaymentTxn[] = [];
@@ -247,20 +119,18 @@ export function generateGameData(numPlayers: number = 2000): {
     const deviceModel = os === "ios" ? pick(DEVICE_MODELS_IOS) : pick(DEVICE_MODELS_ANDROID);
     const channel = pick(CHANNELS);
     const country = pick(COUNTRIES);
-    const installOffset = randInt(0, 121); // install over 4-month window (Oct 1 – Jan 30)
+    const installOffset = randInt(0, 121);
     const installHour = randInt(0, 23);
     const installTime = new Date(baseDate.getTime() + installOffset * 86400000 + installHour * 3600000);
 
     const player: GamePlayer = {
-      game_user_id: `player_${String(i + 1).padStart(4, "0")}`,
-      install_id: `inst_${randInt(100000, 999999)}`,
+      game_user_id: `player_${String(i + 1).padStart(5, "0")}`,
+      install_id: `i_${randInt(100000, 999999)}`,
       install_time: installTime.toISOString(),
       campaign_id: pick(CAMPAIGNS),
       adset_id: pick(ADSETS),
       creative_id: pick(CREATIVES),
-      channel,
-      country,
-      os,
+      channel, country, os,
       device_model: deviceModel,
       device_tier: pick(["low", "mid", "high"]),
       consent_tracking: seededRandom() > 0.15,
@@ -269,60 +139,81 @@ export function generateGameData(numPlayers: number = 2000): {
     players.push(player);
 
     const archetype = pickArchetype();
-    const config = ARCHETYPES[archetype];
+    const cfg = ARCHETYPES[archetype];
+    const activeDays = randInt(cfg.activeDays[0], cfg.activeDays[1]);
+    const maxLevel = randInt(cfg.lvl[0], cfg.lvl[1]);
+    const dayPool = [0,1,2,3,4,5,6].sort(() => seededRandom() - 0.5);
+    const dayOffsets = dayPool.slice(0, Math.min(activeDays, 7)).sort((a, b) => a - b);
 
-    // Generate events for 7 days
-    const sessionCount = randInt(config.sessionsPerDay[0] * 7, config.sessionsPerDay[1] * 7);
-    for (let s = 0; s < sessionCount; s++) {
-      const dayOffset = randInt(0, 6);
-      const hour = randInt(0, 23);
-      const sessionTime = new Date(installTime.getTime() + dayOffset * 86400000 + hour * 3600000 + randInt(0, 3599) * 1000);
-      const sessionId = `sess_${i}_${s}`;
-      const sessionLen = randInt(config.sessionLengthMin[0], config.sessionLengthMin[1]);
+    // Generate 1 or 2 compact sessions
+    for (let s = 0; s < cfg.sessN; s++) {
+      const dayOff = dayOffsets[s % dayOffsets.length];
+      const hour = randInt(6, 23);
+      const sMs = installTime.getTime() + dayOff * 86400000 + hour * 3600000 + randInt(0, 3599) * 1000;
+      const sLen = randInt(cfg.sLen[0], cfg.sLen[1]);
+      const sid = `s${i}_${s}`;
+      const uid = player.game_user_id;
 
-      events.push({
-        game_user_id: player.game_user_id,
-        event_time: sessionTime.toISOString(),
-        event_name: "session_start",
-        session_id: sessionId,
-        params: {},
-      });
+      events.push({ game_user_id: uid, event_time: new Date(sMs).toISOString(), event_name: "session_start", session_id: sid, params: {} });
 
-      // Add some in-session events
-      const numEvents = randInt(2, 8);
-      for (let e = 0; e < numEvents; e++) {
-        const evtOffset = randInt(1, sessionLen) * 60 * 1000;
-        const evtTime = new Date(sessionTime.getTime() + evtOffset);
-        const evtName = pick(EVENT_NAMES.filter((n) => n !== "session_start" && n !== "session_end"));
-        events.push({
-          game_user_id: player.game_user_id,
-          event_time: evtTime.toISOString(),
-          event_name: evtName,
-          session_id: sessionId,
-          params: evtName === "level_up" ? { level: randInt(1, config.maxLevelD7[1]) } : {},
-        });
+      const sessionEvts: { name: string; params: Record<string, string | number> }[] = [];
+      // Emit events only in primary session (s===0)
+      if (s === 0) {
+        if (maxLevel > 1) sessionEvts.push({ name: "level_up", params: { level: maxLevel } });
+        for (let q = 0; q < randInt(cfg.quest[0], cfg.quest[1]); q++)
+          sessionEvts.push({ name: "quest_complete", params: { quest: `mq_${randInt(1,80)}`, xp: randInt(100,5000) } });
+        for (let p = 0; p < randInt(cfg.pvp[0], cfg.pvp[1]); p++)
+          sessionEvts.push({ name: "pvp_match", params: { result: seededRandom() > 0.5 ? "win" : "lose" } });
+        for (let p = 0; p < randInt(cfg.pve[0], cfg.pve[1]); p++) {
+          const dng = seededRandom() > 0.4;
+          sessionEvts.push({ name: dng ? "dungeon_clear" : "pve_run", params: dng ? { dungeon: pick(DUNGEON_NAMES) } : { area: pick(DUNGEON_NAMES) } });
+        }
+        for (let e = 0; e < randInt(cfg.softE[0], cfg.softE[1]); e++)
+          sessionEvts.push({ name: "soft_earn", params: { amount: randInt(500,5000), source: pick(SOFT_SRC) } });
+        for (let e = 0; e < randInt(cfg.softS[0], cfg.softS[1]); e++)
+          sessionEvts.push({ name: "soft_spend", params: { amount: randInt(200,4000), target: pick(SPEND_TGT) } });
+        for (let e = 0; e < randInt(cfg.hardE[0], cfg.hardE[1]); e++)
+          sessionEvts.push({ name: "hard_earn", params: { amount: randInt(5,50), source: pick(HARD_SRC) } });
+        for (let e = 0; e < randInt(cfg.hardS[0], cfg.hardS[1]); e++)
+          sessionEvts.push({ name: "hard_spend", params: { amount: randInt(5,40), target: pick(SPEND_TGT) } });
+        for (let g = 0; g < randInt(cfg.gacha[0], cfg.gacha[1]); g++)
+          sessionEvts.push({ name: "gacha_open", params: { type: pick(GACHA_T), pulls: randInt(1,10) } });
+        for (let sv = 0; sv < randInt(cfg.shop[0], cfg.shop[1]); sv++)
+          sessionEvts.push({ name: "shop_view", params: { section: pick(["featured","daily","gem","costume","equip"]) } });
+        for (let ia = 0; ia < randInt(cfg.iap[0], cfg.iap[1]); ia++)
+          sessionEvts.push({ name: seededRandom() > 0.5 ? "iap_offer_view" : "battle_pass_view", params: { offer: pick(SKU_CATEGORIES) } });
+        for (let c = 0; c < randInt(cfg.chat[0], cfg.chat[1]); c++)
+          sessionEvts.push({ name: "chat_message", params: { channel: pick(CHAT_CH) } });
+        for (let f = 0; f < randInt(cfg.friends[0], cfg.friends[1]); f++)
+          sessionEvts.push({ name: "friend_add", params: { friend: `player_${String(randInt(1,numPlayers)).padStart(5,"0")}` } });
+        if (seededRandom() < cfg.guildP) {
+          sessionEvts.push({ name: "guild_join", params: { guild: `g_${randInt(1,200)}` } });
+          for (let g = 0; g < randInt(1,2); g++)
+            sessionEvts.push({ name: "guild_activity", params: { type: pick(["boss","war","quest","donate","buff"]) } });
+        }
       }
 
-      events.push({
-        game_user_id: player.game_user_id,
-        event_time: new Date(sessionTime.getTime() + sessionLen * 60000).toISOString(),
-        event_name: "session_end",
-        session_id: sessionId,
-        params: { duration_seconds: sessionLen * 60 },
-      });
+      // Shuffle and emit with timestamps spread across session
+      sessionEvts.sort(() => seededRandom() - 0.5);
+      for (let e = 0; e < sessionEvts.length; e++) {
+        const off = Math.round((e + 1) / (sessionEvts.length + 2) * sLen * 60000);
+        events.push({ game_user_id: uid, event_time: new Date(sMs + off).toISOString(), event_name: sessionEvts[e].name, session_id: sid, params: sessionEvts[e].params });
+      }
+
+      events.push({ game_user_id: uid, event_time: new Date(sMs + sLen * 60000).toISOString(), event_name: "session_end", session_id: sid, params: { duration_seconds: sLen * 60 } });
     }
 
-    // Generate payments
-    if (seededRandom() < config.payProb) {
-      const txnCount = randInt(config.txnCountD7[0], config.txnCountD7[1]);
+    // Payments
+    if (seededRandom() < cfg.payProb) {
+      const txnCount = randInt(cfg.txnCountD7[0], cfg.txnCountD7[1]);
+      const totalRev = randFloat(cfg.revenueD7[0], cfg.revenueD7[1]);
       for (let t = 0; t < txnCount; t++) {
-        const txnDay = randInt(0, 6);
-        const txnTime = new Date(installTime.getTime() + txnDay * 86400000 + randInt(0, 86399) * 1000);
-        const amount = randFloat(config.revenueD7[0] / Math.max(txnCount, 1), config.revenueD7[1] / Math.max(txnCount, 1));
+        const txnTime = new Date(installTime.getTime() + randInt(0, 6) * 86400000 + randInt(0, 86399) * 1000);
+        const amount = Math.max(0.99, +(totalRev / txnCount * (0.5 + seededRandom())).toFixed(2));
         payments.push({
           game_user_id: player.game_user_id,
           txn_time: txnTime.toISOString(),
-          amount_usd: Math.round(amount * 100) / 100,
+          amount_usd: amount,
           product_sku: pick(SKU_CATEGORIES),
           payment_channel: pick(PAYMENT_CHANNELS),
           is_refund: seededRandom() < 0.02,
@@ -331,7 +222,7 @@ export function generateGameData(numPlayers: number = 2000): {
     }
   }
 
-  // Generate UA cost data (full 4-month window)
+  // UA cost data (full 4-month window)
   const uaCosts: UACost[] = [];
   for (const campaign of CAMPAIGNS) {
     for (let d = 0; d < 122; d++) {
@@ -690,10 +581,15 @@ export function computePLTVFeatures(
     const chatMessages = eventsW7d.filter((e) => e.event_name === "chat_message").length;
 
     // Block 5 — Monetization
+    const paymentsD3 = userPayments.filter(
+      (p) => !p.is_refund && new Date(p.txn_time).getTime() - installMs <= 3 * 86400000
+    );
     const paymentsD7 = userPayments.filter(
       (p) => !p.is_refund && new Date(p.txn_time).getTime() - installMs <= 7 * 86400000
     );
+    const revenueD3 = Math.round(paymentsD3.reduce((sum, p) => sum + p.amount_usd, 0) * 100) / 100;
     const revenueD7 = Math.round(paymentsD7.reduce((sum, p) => sum + p.amount_usd, 0) * 100) / 100;
+    const isPayerD3 = paymentsD3.length > 0 ? 1 : 0;
     const isPayer = paymentsD7.length > 0 ? 1 : 0;
     const firstPurchase = paymentsD7.sort((a, b) => new Date(a.txn_time).getTime() - new Date(b.txn_time).getTime())[0];
     const firstPurchaseHours = firstPurchase
@@ -701,23 +597,70 @@ export function computePLTVFeatures(
       : 0;
     const firstSku = firstPurchase?.product_sku || "none";
 
-    // Labels — simulate D30/D60 LTV based on archetype patterns
-    // Use D7 revenue as anchor and extrapolate with noise
+    // Labels — use real D3/D7 from payments, simulate D30/D60/D90 using archetypes
+    // so that ranking by D3 vs D7 vs D30 vs D60 vs D90 yields meaningfully
+    // different orderings (late converters, early churners, etc.)
+    const ltvD3 = revenueD3;
     const ltvD7 = revenueD7;
     let ltvD30: number;
     let ltvD60: number;
+    let ltvD90: number;
+
+    // Assign archetype via seededRandom (deterministic per user)
+    const archetypeRoll = seededRandom();
+    const engagementSignal = activeDays + sessionsW7d.size * 0.5 + maxLevel * 0.3 + guildJoined * 5;
+
     if (revenueD7 > 0) {
-      // Payers: D30 ≈ 2-4x D7, D60 ≈ 3-6x D7 with diminishing returns
-      ltvD30 = Math.round(revenueD7 * randFloat(1.8, 4.0) * 100) / 100;
-      ltvD60 = Math.round(ltvD30 * randFloat(1.3, 2.0) * 100) / 100;
-    } else {
-      // Small chance free users convert later
-      if (seededRandom() < 0.08) {
-        ltvD30 = randFloat(0.5, 10);
-        ltvD60 = ltvD30 + randFloat(0, 15);
+      if (archetypeRoll < 0.10) {
+        // EARLY WHALE / CHURN (10%) — big D7 spender, but churns quickly
+        ltvD30 = Math.round(revenueD7 * randFloat(1.0, 1.15) * 100) / 100;
+        ltvD60 = Math.round(ltvD30 * randFloat(1.0, 1.05) * 100) / 100;
+        ltvD90 = Math.round(ltvD60 * randFloat(1.0, 1.02) * 100) / 100;
+      } else if (archetypeRoll < 0.25) {
+        // ONE-TIME BUYER (15%) — single purchase, never again
+        ltvD30 = ltvD7;
+        ltvD60 = ltvD7;
+        ltvD90 = ltvD7;
+      } else if (archetypeRoll < 0.45) {
+        // BURST & PLATEAU (20%) — good D30 growth, then flattens
+        ltvD30 = Math.round(revenueD7 * randFloat(2.0, 4.0) * 100) / 100;
+        ltvD60 = Math.round(ltvD30 * randFloat(1.0, 1.15) * 100) / 100;
+        ltvD90 = Math.round(ltvD60 * randFloat(1.0, 1.08) * 100) / 100;
+      } else if (archetypeRoll < 0.70) {
+        // STEADY GROWER (25%) — consistent spend growth
+        ltvD30 = Math.round(revenueD7 * randFloat(2.0, 3.5) * 100) / 100;
+        ltvD60 = Math.round(ltvD30 * randFloat(1.4, 2.2) * 100) / 100;
+        ltvD90 = Math.round(ltvD60 * randFloat(1.2, 1.7) * 100) / 100;
       } else {
+        // ACCELERATING SPENDER (30%) — engagement-driven late spending
+        const engFactor = Math.min(engagementSignal / 15, 3);
+        ltvD30 = Math.round(revenueD7 * randFloat(1.5, 2.5) * 100) / 100;
+        ltvD60 = Math.round(ltvD30 * randFloat(1.5, 2.5) * engFactor * 100) / 100;
+        ltvD90 = Math.round(ltvD60 * randFloat(1.3, 2.0) * 100) / 100;
+      }
+    } else {
+      // Non-payer at D7
+      if (archetypeRoll < 0.12) {
+        // LATE CONVERTER — D30 (12%) — starts paying after D7
+        ltvD30 = Math.round(randFloat(2, 25) * 100) / 100;
+        ltvD60 = Math.round(ltvD30 * randFloat(1.5, 3.0) * 100) / 100;
+        ltvD90 = Math.round(ltvD60 * randFloat(1.2, 2.0) * 100) / 100;
+      } else if (archetypeRoll < 0.20) {
+        // SLOW BUILDER (8%) — converts very late, D60+; high engagement
+        const engBoost = Math.min(engagementSignal / 10, 4);
+        ltvD30 = Math.round(randFloat(0, 3) * 100) / 100;
+        ltvD60 = Math.round(randFloat(5, 40) * engBoost * 100) / 100;
+        ltvD90 = Math.round(ltvD60 * randFloat(1.5, 3.0) * 100) / 100;
+      } else if (archetypeRoll < 0.25) {
+        // WHALE SLEEPER (5%) — zero D7, zero D30, explodes at D60+
+        ltvD30 = 0;
+        ltvD60 = Math.round(randFloat(20, 100) * 100) / 100;
+        ltvD90 = Math.round(ltvD60 * randFloat(2.0, 5.0) * 100) / 100;
+      } else {
+        // TRUE FREE PLAYER (75%) — never pays
         ltvD30 = 0;
         ltvD60 = 0;
+        ltvD90 = 0;
       }
     }
 
@@ -753,6 +696,7 @@ export function computePLTVFeatures(
       guild_activity_events_w7d: guildActivity,
       friends_added_w7d: friendsAdded,
       chat_messages_w7d: chatMessages,
+      is_payer_by_d3: isPayerD3,
       is_payer_by_d7: isPayer,
       num_txn_d7: paymentsD7.length,
       revenue_d7: revenueD7,
@@ -765,10 +709,13 @@ export function computePLTVFeatures(
       install_date: player.install_time.split("T")[0],
       install_hour: installDate.getHours(),
       install_day_of_week: installDate.getDay(),
+      ltv_d3: ltvD3,
       ltv_d7: ltvD7,
       ltv_d30: ltvD30,
       ltv_d60: ltvD60,
+      ltv_d90: ltvD90,
       is_churned_d14: isChurnedD14,
+      payer_by_d3: isPayerD3,
       payer_by_d7: isPayer,
     };
   });
