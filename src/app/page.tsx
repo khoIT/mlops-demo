@@ -19,6 +19,7 @@ import ModelTesting from "@/components/ModelTesting";
 import ExploratoryDataDiscovery from "@/components/ExploratoryDataDiscovery";
 import PersonaPipeline from "@/components/PersonaPipeline";
 import PLTVPipeline from "@/components/PLTVPipeline";
+import PLTVSimPipeline from "@/components/PLTVSimPipeline";
 import LearnPage from "@/components/LearnPage";
 import { InfoBanner } from "@/components/InfoTooltip";
 import { Database, Cpu, GitBranch, BookOpen, FlaskConical, Users, Swords, ChevronRight } from "lucide-react";
@@ -199,7 +200,7 @@ export default function Home() {
             <h2 className="text-2xl font-bold text-zinc-100 mb-2">Choose a Playbook</h2>
             <p className="text-sm text-zinc-500">Each playbook is a complete end-to-end ML workflow with different goals, data, and techniques.</p>
           </div>
-          <div className="grid grid-cols-3 gap-6 max-w-[1200px] mx-auto">
+          <div className="grid grid-cols-2 gap-6 max-w-[1200px] mx-auto">
             {/* Supervised Learning */}
             <button
               onClick={() => { setActivePlaybook("supervised"); setCurrentStep("data_explorer"); }}
@@ -277,8 +278,63 @@ export default function Home() {
                 <span className="text-[10px] text-zinc-600">Use case: &quot;Predict D60 LTV at D7 → optimize UA spend&quot;</span>
               </div>
             </button>
+
+            {/* pLTV Sim Pipeline */}
+            <button
+              onClick={() => setActivePlaybook("pltv_sim")}
+              className="group text-left bg-zinc-900 border border-zinc-800 rounded-xl p-6 hover:border-cyan-500/40 hover:bg-cyan-500/5 transition-all"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-cyan-600/20 flex items-center justify-center">
+                  <FlaskConical size={20} className="text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-zinc-100 group-hover:text-cyan-400 transition-colors">pLTV Simulation Lab</h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400">Feature / Model Sandbox</span>
+                </div>
+              </div>
+              <p className="text-xs text-zinc-400 mb-4">Interactive simulation for feature selection, model training (GBT/LR/RF), offline evaluation, and economic impact analysis.</p>
+              <div className="space-y-1.5 text-[10px] text-zinc-500">
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-cyan-400" />Raw Log Explorer → Feature Builder</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-cyan-400" />4 Algorithms → Offline Eval (Lift/SHAP)</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-cyan-400" />Activation Simulator → Economic Impact</div>
+                <div className="flex items-center gap-1.5"><ChevronRight size={10} className="text-cyan-400" />Data Leakage Toggle → Uplift Model</div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-zinc-800">
+                <span className="text-[10px] text-zinc-600">Use case: &quot;Which features & model maximize ROAS?&quot;</span>
+              </div>
+            </button>
           </div>
         </main>
+      ) : activePlaybook === "pltv_sim" ? (
+        /* ─── pLTV Sim Pipeline ─── */
+        <>
+          <div className="max-w-[1600px] mx-auto px-6 py-4 space-y-3">
+            <div className="flex items-center gap-3 mb-1">
+              <button
+                onClick={() => setActivePlaybook(null)}
+                className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
+              >
+                ← Playbooks
+              </button>
+              <span className="text-zinc-700">|</span>
+              <span className="text-base font-bold text-cyan-400">pLTV Simulation Lab</span>
+              <span className="relative group">
+                <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-cyan-500/60 hover:text-cyan-400 hover:bg-cyan-500/10 cursor-help transition-all">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                </span>
+                <span className="absolute z-50 top-full left-1/2 -translate-x-1/2 mb-2 w-72 rounded-lg border border-zinc-700 bg-zinc-950 shadow-xl shadow-black/50 p-3 opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity">
+                  <span className="text-xs font-semibold text-cyan-400 block mb-1">pLTV Simulation Lab</span>
+                  <span className="text-[11px] text-zinc-400 leading-relaxed block">An end-to-end sandbox for building predictive Lifetime Value models. Walk through raw data exploration → feature engineering → model training → offline evaluation → activation simulation → economic impact analysis. Compare algorithms, detect data leakage, and find the optimal targeting strategy.</span>
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 rotate-45 border-r border-b border-zinc-700 bg-zinc-950" />
+                </span>
+              </span>
+            </div>
+          </div>
+          <main className="max-w-[1600px] mx-auto px-6 pb-12">
+            <PLTVSimPipeline />
+          </main>
+        </>
       ) : activePlaybook === "pltv" ? (
         /* ─── pLTV Pipeline ─── */
         <>

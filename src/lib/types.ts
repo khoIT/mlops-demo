@@ -73,7 +73,7 @@ export interface PredictionResult {
 
 export type PipelineStep = "data_explorer" | "eda" | "feature_training" | "model_testing" | "persona_pipeline";
 
-export type Playbook = "supervised" | "persona" | "pltv";
+export type Playbook = "supervised" | "persona" | "pltv" | "pltv_sim";
 
 // ─── pLTV Pipeline Types ────────────────────────────────────────────────────
 
